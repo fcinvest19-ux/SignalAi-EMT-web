@@ -3,8 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SignalAi — Détection d'opportunités de management de transition</title>
-  <meta name="description" content="SignalAi détecte en temps réel les signaux faibles d'opportunités en management de transition : restructurations, M&A, crises IT, nominations dirigeants. Prenez une longueur d'avance." />
+  <title>SignalAi — Détection d'opportunités pour cabinets de management de transition</title>
+  <meta name="description" content="SignalAi détecte, score et priorise les signaux d'entreprise pouvant révéler des opportunités de mission pour les cabinets de management de transition : gouvernance, transformation, crise, M&A, restructuration." />
+  <link rel="canonical" href="https://signalai.fr/" />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="SignalAi — Opportunités de management de transition" />
+  <meta property="og:description" content="Détectez plus tôt les situations d'entreprise pouvant devenir des missions de management de transition." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://signalai.fr/" />
+  <meta property="og:image" content="https://signalai.fr/logo-signalai.png" />
+  <meta property="og:locale" content="fr_FR" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="SignalAi — Opportunités de management de transition" />
+  <meta name="twitter:description" content="Détectez plus tôt les situations d'entreprise pouvant devenir des missions de management de transition." />
+  <meta name="twitter:image" content="https://signalai.fr/logo-signalai.png" />
   <style>
     :root {
       --bg:       #0f172a;
@@ -72,8 +87,8 @@
     }
 
     .logo-img {
-      width: 36px;
-      height: 36px;
+      width: 42px;
+      height: 42px;
       border-radius: 10px;
       object-fit: cover;
       flex-shrink: 0;
@@ -157,9 +172,9 @@
 
     h1 {
       margin: 16px 0 14px;
-      font-size: clamp(30px, 4.5vw, 52px);
-      line-height: 1.06;
-      letter-spacing: -.03em;
+      font-size: clamp(24px, 3vw, 36px);
+      line-height: 1.15;
+      letter-spacing: -.02em;
       color: var(--title);
     }
 
@@ -358,12 +373,12 @@
       <nav class="nav" aria-label="Navigation principale">
         <a href="#solution">Solution</a>
         <a href="#cas-usage">Cas d'usage</a>
-        <a href="#pourquoi">Pourquoi SignalAi</a>
+        <a href="#pilote">Pilote</a>
         <a href="#contact">Contact</a>
       </nav>
       <a class="btn btn-accent btn-sm"
-         href="mailto:contact@signalai.fr?subject=Demande%20de%20d%C3%A9mo%20SignalAi">
-        Demander une démo
+         href="#pilote">
+        Échanger sur un pilote
       </a>
     </div>
   </header>
@@ -376,18 +391,21 @@
 
         <div class="hero-copy">
           <span class="eyebrow">SignalAi · Produit dédié aux cabinets EMT</span>
-          <h1>Identifiez plus vite les opportunités de management de transition.</h1>
+          <h1>Détectez les situations d'entreprise qui peuvent devenir des missions — avant qu'elles ne soient visibles par tous.</h1>
           <p class="lead">
-            SignalAi détecte, filtre et priorise les signaux d'entreprise susceptibles de générer
-            des missions de management de transition : gouvernance, transformation, crise opérationnelle,
-            tension SI, M&amp;A ou réorganisation.
+            SignalAi analyse les signaux publics de transformation, gouvernance, crise opérationnelle,
+            tension SI, M&amp;A ou réorganisation pour faire remonter les opportunités réellement
+            activables par un cabinet de management de transition.
+          </p>
+          <p class="lead" style="font-weight:500; color:var(--text);">
+            Moins de veille manuelle. Moins de bruit. Plus de signaux qualifiés pour engager
+            les bons échanges au bon moment.
           </p>
           <div class="hero-actions">
-            <a class="btn btn-accent"
-               href="mailto:contact@signalai.fr?subject=Demande%20de%20d%C3%A9mo%20SignalAi">
-              Demander une démo
+            <a class="btn btn-accent" href="#pilote">
+              Échanger sur un pilote
             </a>
-            <a class="btn btn-secondary" href="#solution">Découvrir la solution</a>
+            <a class="btn btn-secondary" href="#cas-usage">Voir les cas d'usage</a>
           </div>
           <div class="hero-meta">
             <span class="meta-pill">Détection automatisée de signaux business</span>
@@ -430,6 +448,22 @@
       </div>
     </section>
 
+    <!-- ── PROBLÈME ───────────────────────────────────── -->
+    <section class="section" id="probleme">
+      <div class="container">
+        <div class="section-heading" style="max-width:860px;">
+          <h2>Les opportunités naissent souvent avant l'appel entrant</h2>
+          <p>Pour un cabinet de management de transition, les meilleures opportunités n'apparaissent
+             pas toujours sous forme d'appel d'offres ou de demande explicite. Elles se révèlent souvent
+             plus tôt : départ d'un dirigeant, crise opérationnelle, tension SI, acquisition, réorganisation,
+             pression financière ou transformation mal engagée.</p>
+          <p style="margin-top:14px;">Le problème est que ces signaux sont dispersés, bruyants et difficiles
+             à qualifier. Résultat : les équipes commerciales passent du temps à faire de la veille,
+             ou découvrent les opportunités trop tard.</p>
+        </div>
+      </div>
+    </section>
+
     <!-- ── SOLUTION ───────────────────────────────────── -->
     <section class="section" id="solution">
       <div class="container">
@@ -444,21 +478,66 @@
         </div>
         <div class="grid-3">
           <article class="section-card">
-            <h3>Détection automatisée</h3>
-            <p>Collecte structurée de signaux issus de sources économiques, sectorielles,
-               institutionnelles et spécialisées.</p>
+            <h3>Détection</h3>
+            <p>SignalAi collecte des signaux issus de sources économiques, institutionnelles,
+               sectorielles et spécialisées afin d'identifier les événements pouvant révéler
+               une situation de transformation.</p>
           </article>
           <article class="section-card">
-            <h3>Scoring intelligent</h3>
-            <p>Qualification des situations selon leur intensité, leur urgence et leur pertinence
-               pour le management de transition.</p>
+            <h3>Priorisation</h3>
+            <p>Chaque signal est analysé selon sa criticité, son urgence, sa pertinence EMT
+               et son potentiel d'activation commerciale.</p>
           </article>
           <article class="section-card">
-            <h3>Alertes exploitables</h3>
-            <p>Restitution claire pour permettre une prise de contact rapide, ciblée et
-               commercialement pertinente.</p>
+            <h3>Activation</h3>
+            <p>Les signaux qualifiés sont restitués sous forme d'alertes ou de synthèses exploitables,
+               avec un angle d'approche et une lecture métier.</p>
           </article>
         </div>
+      </div>
+    </section>
+
+    <!-- ── EXEMPLE D'ALERTE ───────────────────────────── -->
+    <section class="section" id="exemple">
+      <div class="container">
+        <div class="section-heading">
+          <h2>Exemple de signal détecté</h2>
+          <p>Une illustration anonymisée du type d'alerte produite par SignalAi.</p>
+        </div>
+        <article class="section-card"
+                 style="max-width:720px; margin:0 auto; border-color:rgba(240,90,30,.32); box-shadow:0 18px 40px rgba(240,90,30,.10);">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:18px; flex-wrap:wrap;">
+            <strong style="color:var(--title); font-size:16px;">Entreprise industrielle — Pays de la Loire</strong>
+            <span class="eyebrow">Niveau · Chaud — à creuser</span>
+          </div>
+          <div class="mini-list">
+            <div class="mini-item">
+              <span class="mini-badge">!</span>
+              <div>
+                <strong>Signal détecté</strong>
+                <span>Remplacement du directeur général après une période de tensions opérationnelles
+                      et de réorganisation interne.</span>
+              </div>
+            </div>
+            <div class="mini-item">
+              <span class="mini-badge">↗</span>
+              <div>
+                <strong>Lecture SignalAi</strong>
+                <span>Contexte potentiellement favorable à une mission de transition autour de
+                      la stabilisation managériale, de la performance industrielle ou de la conduite
+                      du changement.</span>
+              </div>
+            </div>
+            <div class="mini-item">
+              <span class="mini-badge">→</span>
+              <div>
+                <strong>Action suggérée</strong>
+                <span>Approche ciblée du président ou du DRH avec un angle « sécurisation
+                      de la transition de gouvernance ».</span>
+              </div>
+            </div>
+          </div>
+        </article>
       </div>
     </section>
 
@@ -507,31 +586,66 @@
       </div>
     </section>
 
-    <!-- ── POURQUOI SIGNALAI ───────────────────────────── -->
+    <!-- ── DIFFÉRENCE ─────────────────────────────────── -->
+    <section class="section" id="difference">
+      <div class="container">
+        <div class="section-heading" style="max-width:860px;">
+          <h2>SignalAi n'est pas un outil de veille généraliste</h2>
+          <p>SignalAi ne se contente pas d'agréger des articles ou de produire des listes de prospects.
+             La plateforme analyse les événements d'entreprise avec une grille de lecture orientée
+             management de transition : criticité, urgence, contexte de transformation, probabilité
+             d'intervention externe et angle d'approche commerciale.</p>
+          <p style="margin-top:14px;">L'objectif n'est pas de produire plus d'information, mais de
+             faire remonter moins de signaux, mieux qualifiés et plus actionnables.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── POURQUOI UNE SOLUTION DÉDIÉE EMT ────────────── -->
     <section class="section" id="pourquoi">
       <div class="container">
-        <div class="section-heading">
-          <h2>Pourquoi SignalAi</h2>
-          <p>L'objectif est de faire gagner du temps commercial tout en augmentant la pertinence
-             des opportunités détectées.</p>
+        <div class="section-heading" style="max-width:860px;">
+          <h2>Pourquoi une solution dédiée au management de transition ?</h2>
+          <p>Une alerte générique peut dire : « une entreprise se réorganise ».</p>
+          <p style="margin-top:14px;">SignalAi cherche à répondre à une question plus métier :</p>
         </div>
-        <div class="grid-3">
-          <article class="section-card">
-            <h3>Approche orientée EMT</h3>
-            <p>La grille d'analyse est pensée pour repérer les contextes dans lesquels un renfort
-               managérial temporaire fait sens.</p>
-          </article>
-          <article class="section-card">
-            <h3>Réduction du bruit</h3>
-            <p>La détection vise à filtrer l'information peu utile pour concentrer l'attention sur
-               les situations réellement activables.</p>
-          </article>
-          <article class="section-card">
-            <h3>Mise en œuvre progressive</h3>
-            <p>Le service peut être lancé de manière pragmatique, puis enrichi au fil des besoins
-               et des cas d'usage cabinet.</p>
-          </article>
+        <blockquote style="max-width:860px; margin:0 0 24px; padding:22px 26px; border-left:3px solid var(--accent); background:rgba(240,90,30,.06); border-radius:8px; color:var(--title); font-size:17px; font-style:italic; line-height:1.6;">
+          « Cette situation peut-elle créer un besoin de management de transition ? Si oui, sur quel angle,
+          avec quel niveau d'urgence, et auprès de quel interlocuteur ? »
+        </blockquote>
+        <div class="section-heading" style="max-width:860px;">
+          <p>C'est cette lecture métier qui distingue SignalAi d'un simple outil de veille ou
+             d'automatisation commerciale.</p>
         </div>
+      </div>
+    </section>
+
+    <!-- ── PROGRAMME PILOTE ───────────────────────────── -->
+    <section class="section" id="pilote">
+      <div class="container">
+        <div class="section-heading" style="max-width:860px;">
+          <h2>Tester SignalAi sur un périmètre ciblé</h2>
+          <p>Le pilote SignalAi permet de vérifier rapidement la valeur des signaux détectés sur
+             un périmètre défini avec le cabinet : typologies de signaux, secteurs prioritaires,
+             zones géographiques, comptes stratégiques, fréquence des alertes et format de restitution.</p>
+          <p style="margin-top:14px;">L'objectif est simple : mesurer si SignalAi permet d'identifier
+             plus tôt des opportunités pertinentes et d'alimenter concrètement l'action commerciale du cabinet.</p>
+        </div>
+        <div class="section-card" style="max-width:720px; margin:0 0 24px;">
+          <h3 style="margin-bottom:14px;">Périmètre cadré ensemble</h3>
+          <ul class="checklist" style="grid-template-columns:1fr 1fr; display:grid; gap:12px 24px;">
+            <li>Familles de signaux prioritaires</li>
+            <li>Secteurs ou zones géographiques</li>
+            <li>Fréquence des alertes</li>
+            <li>Niveau de chaleur attendu</li>
+            <li>Critères de succès</li>
+            <li>Format de restitution</li>
+          </ul>
+        </div>
+        <a class="btn btn-accent"
+           href="mailto:contact@signalai.fr?subject=Pilote%20SignalAi">
+          Échanger sur un pilote
+        </a>
       </div>
     </section>
 
@@ -544,8 +658,8 @@
             <p>Vous souhaitez découvrir comment SignalAi peut alimenter votre deal flow en
                opportunités EMT qualifiées ? Prenez contact pour un échange sans engagement.</p>
             <a class="btn btn-accent"
-               href="mailto:contact@signalai.fr?subject=Demande%20de%20d%C3%A9mo%20SignalAi">
-              Demander une démo
+               href="mailto:contact@signalai.fr?subject=Pilote%20SignalAi">
+              Échanger sur un pilote
             </a>
           </div>
           <div class="contact-box">
@@ -561,6 +675,21 @@
     </section>
 
   </main>
+
+  <!-- ── OUVERTURE VERTICALE (discrète) ─────────────── -->
+  <section id="ouverture" style="padding:24px 0 8px;">
+    <div class="container" style="max-width:760px; opacity:.72;">
+      <h3 style="font-size:15px; color:var(--muted); margin:0 0 8px; letter-spacing:.02em;">
+        Un premier vertical : le management de transition
+      </h3>
+      <p style="margin:0; color:var(--muted); font-size:14px; line-height:1.6;">
+        SignalAi a été conçu d'abord pour les cabinets de management de transition. La même
+        logique de détection et d'interprétation de signaux métier peut, le cas échéant, être
+        étudiée pour d'autres activités de conseil ou d'accompagnement stratégique, dans le
+        cadre de pilotes ciblés.
+      </p>
+    </div>
+  </section>
 
   <!-- ── FOOTER ─────────────────────────────────────── -->
   <footer>
