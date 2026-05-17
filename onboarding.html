@@ -75,6 +75,35 @@ const REGIONS = [
   'Nouvelle-Aquitaine','Occitanie','Pays de la Loire','Provence-Alpes-Côte d\'Azur',
 ];
 
+// Taxonomie sectorielle simplifiée (NACE/INSEE consolidé) pour exclusions Gold/Platinum
+const SECTORS_NACE = [
+  'Industrie manufacturière',
+  'Construction / BTP',
+  'Commerce / Distribution',
+  'Transport / Logistique',
+  'Information / Communication / Numérique',
+  'Finance / Assurance',
+  'Immobilier',
+  'Services aux entreprises (conseil, juridique…)',
+  'Santé / Action sociale',
+  'Enseignement / Formation',
+  'Hôtellerie / Restauration',
+  'Énergie / Environnement',
+  'Agriculture / Agroalimentaire / Pêche',
+  'Administration publique',
+  'Arts / Spectacles / Loisirs',
+];
+
+const WEEKLY_DAYS = [
+  {value:'monday',    label:'Lundi'},
+  {value:'tuesday',   label:'Mardi'},
+  {value:'wednesday', label:'Mercredi'},
+  {value:'thursday',  label:'Jeudi'},
+  {value:'friday',    label:'Vendredi'},
+  {value:'saturday',  label:'Samedi'},
+  {value:'sunday',    label:'Dimanche'},
+];
+
 const SOURCES = [
   // ── BRONZE ──
   {id:'API_BODACC',              name:'BODACC Annonces légales',                                    type:'HTTP_API', cat:'API publiques',           geo:'national',          pay:false, pkg:'Bronze', on:true},
@@ -102,7 +131,6 @@ const SOURCES = [
   {id:'RSS_AMF_FR',              name:'AMF France — Flux RSS',                                     type:'RSS',      cat:'Régulateurs',             geo:'national',          pay:false, pkg:'Silver', on:true},
   {id:'RSS_ECO_GOUV',            name:'economie.gouv.fr — Actualités',                             type:'RSS',      cat:'Régulateurs',             geo:'national',          pay:false, pkg:'Silver', on:true},
   // ── GOLD ──
-  {id:'API_INPI_RNE',            name:'INPI RNE — Registre National Entreprises',                 type:'HTTP_API', cat:'API publiques',           geo:'national',          pay:false, pkg:'Gold',   on:true},
   {id:'APIFY_DECIDEURS_CF_DAF',  name:'Decideurs CF — DAF Corner',                                type:'APIFY',    cat:'Décideurs CF/M&A',        geo:'national',          pay:false, pkg:'Gold',   on:true},
   {id:'APIFY_DECIDEURS_CF_MA',   name:'Decideurs CF — Fusions Acquisitions',                      type:'APIFY',    cat:'Décideurs CF/M&A',        geo:'national',          pay:false, pkg:'Gold',   on:true},
   {id:'APIFY_DECIDEURS_CF_RESTR',name:'Decideurs CF — Restructuring',                             type:'APIFY',    cat:'Décideurs CF/M&A',        geo:'national',          pay:false, pkg:'Gold',   on:true},
@@ -125,6 +153,7 @@ const SOURCES = [
   {id:'RSS_PDL_RH_ES',           name:'PDL-career Encadrement stratégique',                       type:'RSS',      cat:'RH/Emploi cadres',        geo:'Pays de la Loire',  pay:false, pkg:'Gold',   on:true},
   {id:'RSS_PDL_RH_MP',           name:'PDL-career Management de projet',                          type:'RSS',      cat:'RH/Emploi cadres',        geo:'Pays de la Loire',  pay:false, pkg:'Gold',   on:true},
   // ── EN COURS DE QUALIFICATION (sans package) ──
+  {id:'API_INPI_RNE',            name:'INPI RNE — Registre National Entreprises',                 type:'HTTP_API', cat:'API publiques',           geo:'national',          pay:false, pkg:null,     on:false},
   {id:'NL_CFODIVE_DAILY',        name:'CFO Dive — Daily Dive',                                    type:'NL',       cat:'Newsletters',             geo:'international',     pay:false, pkg:null,     on:false},
   {id:'NL_CHALLENGES_AUTO',      name:'Challenges — Automobile',                                  type:'NL',       cat:'Newsletters',             geo:'national',          pay:false, pkg:null,     on:false},
   {id:'NL_CHALLENGES_ECO',       name:'Challenges — Économie',                                    type:'NL',       cat:'Newsletters',             geo:'national',          pay:false, pkg:null,     on:false},
@@ -178,6 +207,14 @@ function defaultsForServiceLevel(level) {
       slack_enabled: true, crm_push_enabled: false, advanced_reporting: false, linkedin_module: false
     }
   };
+  if (level === 'PLATINUM') return {
+    llmProfile: 'advanced', analysisDepth: 3,
+    featureFlags: {
+      advanced_scoring: true, advanced_enrichment: true, double_pass_enrichment: true,
+      slack_enabled: true, crm_push_enabled: true, advanced_reporting: true, linkedin_module: true
+    }
+  };
+  // GOLD (défaut)
   return {
     llmProfile: 'advanced', analysisDepth: 3,
     featureFlags: {
@@ -196,54 +233,114 @@ function esc(v) {
   return String(v).replace(/['\u2019\u02BC]/g, "''");
 }
 
+// PostgreSQL array literal pour TEXT[] \u2014 geographic_scope par contact (S109)
+function pgArr(arr) {
+  if (!arr || !arr.length) return "ARRAY[]::TEXT[]";
+  return "ARRAY[" + arr.map(v => `'${esc(v)}'`).join(',') + "]::TEXT[]";
+}
+
+// JSONB literal \u2014 JSON.stringify puis \u00E9chappement apostrophes pour SQL
+function jsonbLit(obj) {
+  const s = JSON.stringify(obj);
+  return `'${s.replace(/'/g, "''")}'::jsonb`;
+}
+
 function genSQL(st) {
   const {clientId, clientName, geographyScope, regions, pkg, sources, signals, contacts, channel,
-         serviceLevel, featureFlags, llmProfile, analysisDepth, excludeGlobal} = st;
+         serviceLevel, featureFlags, llmProfile, analysisDepth, excludeGlobal,
+         goldPrefs, hubspot, delivery} = st;
   const now = new Date().toLocaleString('fr-FR', {dateStyle:'short', timeStyle:'medium'});
   const geoStr = regions.join(', ');
+  const geoScopeStr = Array.isArray(geographyScope) ? geographyScope.join(', ') : geographyScope;
   const nb = sources.length;
+  const ns = signals.length;
+  const nc = contacts.length;
   const ch = channel === 'email' ? 'email' : channel === 'slack' ? 'slack' : 'email+slack';
   const pkgVal = pkg ? `'${esc(pkg)}'` : 'NULL';
   const slVal  = serviceLevel ? `'${serviceLevel}'` : 'NULL';
-  const ffVal  = featureFlags
-    ? `'${JSON.stringify(featureFlags)}'::jsonb`
-    : `'{"advanced_scoring":false,"advanced_enrichment":false,"double_pass_enrichment":false,"slack_enabled":false,"crm_push_enabled":false,"advanced_reporting":false,"linkedin_module":false}'::jsonb`;
   const llmVal = llmProfile    ? `'${llmProfile}'`  : `'light'`;
   const adVal  = analysisDepth != null ? analysisDepth : 1;
   const exclVal = esc(excludeGlobal != null ? excludeGlobal : DEFAULT_EXCLUDE_GLOBAL);
+
+  // feature_flags JSONB
+  const ff = featureFlags || {advanced_scoring:false,advanced_enrichment:false,double_pass_enrichment:false,slack_enabled:false,crm_push_enabled:false,advanced_reporting:false,linkedin_module:false};
+
+  // scoring_config JSONB (Gold/Platinum prefs) — null sinon
+  const isGoldPlus = serviceLevel === 'GOLD' || serviceLevel === 'PLATINUM';
+  const numOrNull = v => (v === '' || v == null) ? null : (parseInt(v, 10) || null);
+  const sc = isGoldPlus && goldPrefs ? {
+    ca_min_keur:  numOrNull(goldPrefs.ca_min_keur),
+    ca_max_keur:  numOrNull(goldPrefs.ca_max_keur),
+    effectif_min: numOrNull(goldPrefs.effectif_min),
+    effectif_max: numOrNull(goldPrefs.effectif_max),
+    sectors_excluded: goldPrefs.sectors_excluded || [],
+  } : null;
+
+  // delivery_config JSONB
+  const dc = delivery ? {
+    digest_hour:   delivery.digest_hour,
+    weekly_day:    delivery.weekly_day,
+    footer_cumul:  delivery.footer_cumul,
+  } : {digest_hour: 8, weekly_day: 'friday', footer_cumul: true};
+
+  // crm_config JSONB (HubSpot) — null si désactivé
+  const cc = (hubspot && hubspot.enabled) ? {
+    crm_type:        'hubspot',
+    hubspot_api_key: hubspot.api_key,
+    pipeline_id:     hubspot.pipeline_id,
+    dealstage_id:    hubspot.dealstage_id,
+  } : null;
 
   let s = '';
   s += `-- ═══════════════════════════════════════════════════════════\n`;
   s += `-- ONBOARDING CLIENT : ${clientId} (${clientName})\n`;
   s += `-- Niveau de service : ${serviceLevel || 'non défini'} · Package sources : ${pkg || 'sur mesure'}\n`;
-  s += `-- ${nb} sources · ${signals.length} signaux · ${contacts.length} contacts · canal=${ch}\n`;
-  s += `-- Généré le ${now} via Signalai Onboarding\n`;
-  s += `-- EXÉCUTION : sudo -u postgres psql -d agent_emt\n`;
+  s += `-- ${nb} sources · ${ns} signaux · ${nc} contacts · canal=${ch}\n`;
+  if (cc) s += `-- HubSpot : activé (push CRM via S-CRM-HUBSPOT-PUSH) — crm_push_approved restera FALSE jusqu'au test E2E\n`;
+  if (sc) s += `-- Scoring : ${sc.sectors_excluded.length} secteur(s) exclu(s)\n`;
+  s += `-- Généré le ${now} via Signalai Onboarding v2.0\n`;
+  s += `-- EXÉCUTION : sudo -u postgres psql -d agent_emt — bloc par bloc (statement-par-statement)\n`;
   s += `-- ═══════════════════════════════════════════════════════════\n\n`;
-  s += `BEGIN;\n\n`;
 
-  s += `-- ─── 1. TABLE clients ───\n`;
+  // 0. Vérification structure (décommenter si nécessaire)
+  s += `-- ─── 0. Vérification structure (décommenter si nécessaire) ───\n`;
+  s += `-- SELECT column_name, data_type FROM information_schema.columns\n`;
+  s += `--   WHERE table_schema='public' AND table_name='clients' ORDER BY ordinal_position;\n`;
+  s += `-- Colonnes attendues : client_id, client_name, geography_scope, geographic_scope, package,\n`;
+  s += `--   service_level, feature_flags JSONB, llm_profile, analysis_depth, exclude_global,\n`;
+  s += `--   scoring_config JSONB, delivery_config JSONB, crm_config JSONB, hubspot_enabled BOOL, crm_push_approved BOOL\n\n`;
+
+  // 1. UPSERT clients
+  s += `-- ─── 1. UPSERT clients : ${clientId} ───\n`;
   s += `INSERT INTO clients (\n`;
   s += `  client_id, client_name, geography_scope, geographic_scope, package,\n`;
-  s += `  service_level, feature_flags, llm_profile, analysis_depth, exclude_global\n`;
-  s += `)\nVALUES (\n`;
-  const geoScopeStr = Array.isArray(geographyScope) ? geographyScope.join(', ') : geographyScope;
+  s += `  service_level, feature_flags, llm_profile, analysis_depth, exclude_global,\n`;
+  s += `  scoring_config, delivery_config, crm_config, hubspot_enabled, crm_push_approved\n`;
+  s += `) VALUES (\n`;
   s += `  '${esc(clientId)}', '${esc(clientName)}',\n`;
   s += `  '${esc(geoScopeStr)}', '${esc(geoStr)}', ${pkgVal},\n`;
-  s += `  ${slVal}, ${ffVal},\n`;
-  s += `  ${llmVal}, ${adVal}, '${exclVal}'\n`;
-  s += `)\nON CONFLICT (client_id) DO UPDATE\n`;
-  s += `  SET client_name      = EXCLUDED.client_name,\n`;
-  s += `      geography_scope  = EXCLUDED.geography_scope,\n`;
-  s += `      geographic_scope = EXCLUDED.geographic_scope,\n`;
-  s += `      package          = EXCLUDED.package,\n`;
-  s += `      service_level    = EXCLUDED.service_level,\n`;
-  s += `      feature_flags    = EXCLUDED.feature_flags,\n`;
-  s += `      llm_profile      = EXCLUDED.llm_profile,\n`;
-  s += `      analysis_depth   = EXCLUDED.analysis_depth,\n`;
-  s += `      exclude_global   = EXCLUDED.exclude_global;\n\n`;
+  s += `  ${slVal}, ${jsonbLit(ff)},\n`;
+  s += `  ${llmVal}, ${adVal}, '${exclVal}',\n`;
+  s += `  ${sc ? jsonbLit(sc) : `'{}'::jsonb`}, ${jsonbLit(dc)}, ${cc ? jsonbLit(cc) : `'{}'::jsonb`},\n`;
+  s += `  ${cc ? 'TRUE' : 'FALSE'}, FALSE  -- crm_push_approved volontairement FALSE : à activer après test E2E\n`;
+  s += `)\nON CONFLICT (client_id) DO UPDATE SET\n`;
+  s += `  client_name      = EXCLUDED.client_name,\n`;
+  s += `  geography_scope  = EXCLUDED.geography_scope,\n`;
+  s += `  geographic_scope = EXCLUDED.geographic_scope,\n`;
+  s += `  package          = EXCLUDED.package,\n`;
+  s += `  service_level    = EXCLUDED.service_level,\n`;
+  s += `  feature_flags    = EXCLUDED.feature_flags,\n`;
+  s += `  llm_profile      = EXCLUDED.llm_profile,\n`;
+  s += `  analysis_depth   = EXCLUDED.analysis_depth,\n`;
+  s += `  exclude_global   = EXCLUDED.exclude_global,\n`;
+  s += `  scoring_config   = EXCLUDED.scoring_config,\n`;
+  s += `  delivery_config  = EXCLUDED.delivery_config,\n`;
+  s += `  crm_config       = EXCLUDED.crm_config,\n`;
+  s += `  hubspot_enabled  = EXCLUDED.hubspot_enabled;\n`;
+  s += `-- Note : crm_push_approved non écrasé sur UPDATE (préserve état d'approbation)\n\n`;
 
-  s += `-- ─── 2. SOUSCRIPTIONS SOURCES (${nb}) ───\n`;
+  // 2. Souscriptions sources
+  s += `-- ─── 2. Souscriptions sources (${nb}) ───\n`;
   s += `DELETE FROM client_source_subscriptions WHERE client_id = '${esc(clientId)}';\n`;
   if (nb > 0) {
     s += `INSERT INTO client_source_subscriptions (client_id, source_id) VALUES\n`;
@@ -251,8 +348,8 @@ function genSQL(st) {
   }
   s += `\n`;
 
-  const ns = signals.length;
-  s += `-- ─── 3. SOUSCRIPTIONS SIGNAUX (${ns}) ───\n`;
+  // 3. Souscriptions signaux
+  s += `-- ─── 3. Souscriptions signaux (${ns}) ───\n`;
   s += `DELETE FROM client_signal_subscriptions WHERE client_id = '${esc(clientId)}';\n`;
   if (ns > 0) {
     s += `INSERT INTO client_signal_subscriptions (client_id, signal_id) VALUES\n`;
@@ -260,22 +357,34 @@ function genSQL(st) {
   }
   s += `\n`;
 
-  const nc = contacts.length;
-  s += `-- ─── 4. CONTACTS DESTINATAIRES (${nc}) ───\n`;
+  // 4. Contacts (geographic_scope TEXT[] — S109 multi-scope)
+  s += `-- ─── 4. Contacts (${nc}) — geographic_scope TEXT[] (S109 multi-scope) ───\n`;
   s += `DELETE FROM client_contacts WHERE client_id = '${esc(clientId)}';\n`;
   if (nc > 0) {
     s += `INSERT INTO client_contacts\n`;
     s += `  (client_id, name, email, role, geographic_scope,\n`;
-    s += `   slack_channel, receives_alert, receives_digest, active)\nVALUES\n`;
+    s += `   slack_channel, receives_alert, receives_digest_daily, receives_digest_weekly, active) VALUES\n`;
     contacts.forEach((c, i) => {
       const sl = c.slack && c.slack.trim() ? `'${esc(c.slack.trim())}'` : 'NULL';
+      const scopes = c.scopes || [];
       s += `  ('${esc(clientId)}', '${esc(c.name)}', '${esc(c.email)}',\n`;
-      s += `   '${c.role}', '${esc(c.scope)}',\n`;
-      s += `   ${sl}, ${c.alert?'TRUE':'FALSE'}, ${c.digest?'TRUE':'FALSE'}, TRUE)${i<nc-1?',':';'}\n`;
+      s += `   '${c.role}', ${pgArr(scopes)},\n`;
+      s += `   ${sl}, ${c.alert?'TRUE':'FALSE'}, ${c.digest_daily?'TRUE':'FALSE'}, ${c.digest_weekly?'TRUE':'FALSE'}, TRUE)${i<nc-1?',':';'}\n`;
     });
   }
-  s += `\nCOMMIT;\n\n`;
+  s += `\n`;
+
+  // 5. Vérification finale
+  s += `-- ─── 5. Vérification finale (sanity check) ───\n`;
+  s += `SELECT c.client_id, c.service_level, c.package, c.hubspot_enabled, c.crm_push_approved,\n`;
+  s += `       (SELECT COUNT(*) FROM client_contacts WHERE client_id=c.client_id) AS nb_contacts,\n`;
+  s += `       (SELECT COUNT(*) FROM client_source_subscriptions WHERE client_id=c.client_id) AS nb_sources,\n`;
+  s += `       (SELECT COUNT(*) FROM client_signal_subscriptions WHERE client_id=c.client_id) AS nb_signals\n`;
+  s += `FROM clients c WHERE client_id='${esc(clientId)}';\n\n`;
+
   s += `-- ✅ ${clientId} onboardé : service_level=${serviceLevel||'NULL'} · package=${pkg||'NULL'} · ${nb} sources · ${ns} signaux · ${nc} contacts\n`;
+  if (cc) s += `-- ⚠️  HubSpot push : exécuter manuellement après test E2E :\n`;
+  if (cc) s += `--    UPDATE clients SET crm_push_approved = TRUE WHERE client_id = '${esc(clientId)}';\n`;
   return s;
 }
 
@@ -325,20 +434,24 @@ function Step1({st, set}) {
   // et pré-charge le package sources correspondant (modifiable indépendamment en Step 2)
   const selServiceLevel = level => {
     const defaults = defaultsForServiceLevel(level);
-    const matchPkg = level.charAt(0) + level.slice(1).toLowerCase(); // 'GOLD' → 'Gold'
+    // PLATINUM utilise le package sources Gold (pas de package Platinum différencié)
+    const pkgKey = level === 'PLATINUM' ? 'GOLD' : level;
+    const matchPkg = pkgKey.charAt(0) + pkgKey.slice(1).toLowerCase(); // 'GOLD' → 'Gold'
     set(s => ({...s, serviceLevel: level, ...defaults, pkg: matchPkg, sources: srcForPkg(matchPkg)}));
   };
 
   const slCls = {
-    BRONZE: {base:'border-amber-800 bg-amber-900/10', sel:'border-amber-400 bg-amber-900/25 ring-1 ring-amber-400'},
-    SILVER: {base:'border-slate-600 bg-slate-800/30', sel:'border-slate-300 bg-slate-700/50 ring-1 ring-slate-300'},
-    GOLD:   {base:'border-yellow-800 bg-yellow-900/10', sel:'border-yellow-400 bg-yellow-900/25 ring-1 ring-yellow-400'},
+    BRONZE:   {base:'border-amber-800 bg-amber-900/10', sel:'border-amber-400 bg-amber-900/25 ring-1 ring-amber-400'},
+    SILVER:   {base:'border-slate-600 bg-slate-800/30', sel:'border-slate-300 bg-slate-700/50 ring-1 ring-slate-300'},
+    GOLD:     {base:'border-yellow-800 bg-yellow-900/10', sel:'border-yellow-400 bg-yellow-900/25 ring-1 ring-yellow-400'},
+    PLATINUM: {base:'border-cyan-800 bg-cyan-900/10',     sel:'border-cyan-300 bg-cyan-900/25 ring-1 ring-cyan-300'},
   };
 
   const slDetails = [
-    {level:'BRONZE', icon:'🥉', label:'Bronze', desc:'Scoring basique · presse nationale', llm:'light',    depth:1},
-    {level:'SILVER', icon:'🥈', label:'Silver', desc:'Scoring avancé + enrichissement',    llm:'standard', depth:2},
-    {level:'GOLD',   icon:'🥇', label:'Gold',   desc:'Enrichissement complet multi-pass',  llm:'advanced', depth:3},
+    {level:'BRONZE',   icon:'🥉', label:'Bronze',   desc:'Scoring basique · presse nationale',          llm:'light',    depth:1},
+    {level:'SILVER',   icon:'🥈', label:'Silver',   desc:'Scoring avancé + enrichissement',             llm:'standard', depth:2},
+    {level:'GOLD',     icon:'🥇', label:'Gold',     desc:'Enrichissement complet multi-pass',           llm:'advanced', depth:3},
+    {level:'PLATINUM', icon:'💎', label:'Platinum', desc:'Gold + scoring spécifique client + push CRM', llm:'advanced', depth:3},
   ];
 
   return (
@@ -436,6 +549,73 @@ function Step1({st, set}) {
           </p>
         )}
       </div>
+
+      {/* ── C1.1 Préférences Gold/Platinum (conditionnel) ── */}
+      {(st.serviceLevel === 'GOLD' || st.serviceLevel === 'PLATINUM') && (
+        <div style={{borderTop:'1px solid #1e293b', paddingTop:'20px', marginTop:'4px'}}>
+          <h3 style={{marginBottom:'4px', color:'#f1f5f9'}}>
+            Préférences {st.serviceLevel === 'PLATINUM' ? 'Platinum' : 'Gold'}
+            <span className="ml-2 text-xs font-normal text-slate-300">(filtres entreprise cible)</span>
+          </h3>
+          <p className="text-slate-200 text-sm mb-3">
+            Cibles taille entreprise et secteurs à exclure. Appliqués dans le filtrage et le scoring.
+          </p>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="fg">
+              <label className="lbl" style={{color:'#e2e8f0'}}>CA cible min (k€) — laisser vide si pas de seuil</label>
+              <input type="number" min="0" value={st.goldPrefs.ca_min_keur}
+                onChange={e=>set(s=>({...s, goldPrefs:{...s.goldPrefs, ca_min_keur:e.target.value}}))}
+                placeholder="ex: 10000 (= 10 M€)" />
+            </div>
+            <div className="fg">
+              <label className="lbl" style={{color:'#e2e8f0'}}>CA cible max (k€)</label>
+              <input type="number" min="0" value={st.goldPrefs.ca_max_keur}
+                onChange={e=>set(s=>({...s, goldPrefs:{...s.goldPrefs, ca_max_keur:e.target.value}}))}
+                placeholder="ex: 500000 (= 500 M€)" />
+            </div>
+            <div className="fg">
+              <label className="lbl" style={{color:'#e2e8f0'}}>Effectif cible min</label>
+              <input type="number" min="0" value={st.goldPrefs.effectif_min}
+                onChange={e=>set(s=>({...s, goldPrefs:{...s.goldPrefs, effectif_min:e.target.value}}))}
+                placeholder="ex: 50" />
+            </div>
+            <div className="fg">
+              <label className="lbl" style={{color:'#e2e8f0'}}>Effectif cible max</label>
+              <input type="number" min="0" value={st.goldPrefs.effectif_max}
+                onChange={e=>set(s=>({...s, goldPrefs:{...s.goldPrefs, effectif_max:e.target.value}}))}
+                placeholder="ex: 5000" />
+            </div>
+          </div>
+
+          <div className="fg">
+            <label className="lbl" style={{color:'#e2e8f0'}}>Secteurs exclus (multi-sélection)</label>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {SECTORS_NACE.map(sec => {
+                const active = st.goldPrefs.sectors_excluded.includes(sec);
+                const toggle = () => set(s => {
+                  const cur = s.goldPrefs.sectors_excluded;
+                  const next = cur.includes(sec) ? cur.filter(x=>x!==sec) : [...cur, sec];
+                  return {...s, goldPrefs:{...s.goldPrefs, sectors_excluded: next}};
+                });
+                return (
+                  <span key={sec} onClick={toggle}
+                    className="chip"
+                    style={active
+                      ? {background:'#7f1d1d', color:'#ffffff'}
+                      : {background:'#1e293b', color:'#e2e8f0', border:'1px solid #475569'}}>
+                    {active && <span className="mr-1">✕</span>}{sec}
+                  </span>
+                );
+              })}
+            </div>
+            {st.goldPrefs.sectors_excluded.length > 0 &&
+              <p className="text-xs mt-2" style={{color:'#cbd5e1'}}>
+                {st.goldPrefs.sectors_excluded.length} secteur(s) exclu(s) — signaux entreprises de ces secteurs rejetés en amont
+              </p>}
+          </div>
+        </div>
+      )}
 
       {/* ── Filtres d'exclusion globale ── */}
       <div style={{borderTop:'1px solid #1e293b', paddingTop:'20px', marginTop:'4px'}}>
@@ -683,14 +863,15 @@ function Step3({st, set}) {
   );
 }
 
-/* ─── Étape 4 ─── */
+/* ─── Étape 4 — Contacts, Livraison, HubSpot ─── */
 function Step4({st, set}) {
   const addContact = () => set(s => ({
     ...s,
     contacts: [...s.contacts, {
       id: Date.now(), name:'', email:'', role:'regional',
-      scope: s.regions[0] || 'ALL', slack:'',
-      alert:true, digest:false
+      scopes: s.regions.length ? [s.regions[0]] : ['ALL'],
+      slack:'',
+      alert:true, digest_daily:false, digest_weekly:false
     }]
   }));
   const del = id => set(s => ({...s, contacts: s.contacts.filter(c=>c.id!==id)}));
@@ -700,23 +881,42 @@ function Step4({st, set}) {
       if (c.id !== id) return c;
       let u = {...c, [f]:v};
       if (f === 'role') {
-        if (v === 'national') { u.scope = 'ALL'; u.digest = true; }
-        else { u.digest = false; if (u.scope === 'ALL') u.scope = s.regions[0] || 'ALL'; }
+        if (v === 'national') { u.scopes = ['ALL']; u.digest_daily = true; u.digest_weekly = true; }
+        else { u.digest_daily = false; u.digest_weekly = false; if (u.scopes.includes('ALL')) u.scopes = s.regions.length ? [s.regions[0]] : []; }
       }
       return u;
     })
   }));
+  // C1.2 — Toggle d'une région dans le scopes[] d'un contact (multi-scope TEXT[])
+  // Fix bug : ne pas retomber sur ['ALL'] quand on retire la dernière région
+  // (cela masquait les chips et forçait un aller-retour national↔regional)
+  const toggleScope = (cid, region) => set(s => ({
+    ...s,
+    contacts: s.contacts.map(c => {
+      if (c.id !== cid) return c;
+      const cur = c.scopes || [];
+      // Si on coche une région concrète, retire 'ALL'
+      const base = cur.filter(x => x !== 'ALL');
+      const next = base.includes(region) ? base.filter(x => x !== region) : [...base, region];
+      return {...c, scopes: next};  // peut rester vide, l'avertissement amber s'affiche
+    })
+  }));
+  const setScopeAll = (cid) => set(s => ({
+    ...s,
+    contacts: s.contacts.map(c => c.id === cid ? {...c, scopes: ['ALL']} : c)
+  }));
 
   const showEmail = st.channel === 'email' || st.channel === 'both';
   const showSlack = st.channel === 'slack' || st.channel === 'both';
-  const scopeOpts = ['ALL', ...st.regions];
+  const crmAvailable = st.featureFlags && st.featureFlags.crm_push_enabled;
 
   return (
     <div>
-      <h2 className="mb-1">Étape 4 — Contacts & Livraison</h2>
-      <p className="text-slate-400 text-sm mb-5">Destinataires, canaux, périmètres géo par contact.</p>
+      <h2 className="mb-1">Étape 4 — Contacts, Livraison & CRM</h2>
+      <p className="text-slate-400 text-sm mb-5">Destinataires, canaux, périmètres géo par contact, préférences livraison, push HubSpot.</p>
 
-      <div className="card p-4 mb-5">
+      {/* ── Canal de livraison ── */}
+      <div className="card p-4 mb-4">
         <label className="lbl mb-2">Canal de livraison</label>
         <div className="flex gap-3">
           {[['email','📧 Email'],['slack','💬 Slack'],['both','📧+💬 Les deux']].map(([v,lbl]) => (
@@ -733,62 +933,177 @@ function Step4({st, set}) {
         )}
       </div>
 
-      <div className="space-y-4 overflow-y-auto" style={{maxHeight:'380px'}}>
-        {st.contacts.map((c, idx) => (
-          <div key={c.id} className="card p-4">
-            <div className="flex justify-between items-center mb-3">
-              <span className="text-sm font-semibold text-slate-300">
-                Contact {idx+1} — <span className={c.role==='national'?'text-blue-400':'text-purple-400'}>{c.role}</span>
-              </span>
-              <button onClick={()=>del(c.id)} className="btn-del">Supprimer</button>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="fg">
-                <label className="lbl">Nom</label>
-                <input type="text" value={c.name} onChange={e=>upd(c.id,'name',e.target.value)} placeholder="ex: Marie Dupont" />
-              </div>
-              <div className="fg">
-                <label className="lbl">Rôle *</label>
-                <select value={c.role} onChange={e=>upd(c.id,'role',e.target.value)}>
-                  <option value="national">national — reçoit tout</option>
-                  <option value="regional">regional — filtré par région</option>
-                </select>
-              </div>
-              {showEmail && (
-                <div className="fg">
-                  <label className="lbl">Email *</label>
-                  <input type="email" value={c.email} onChange={e=>upd(c.id,'email',e.target.value)} placeholder="ex: alertes@cabinet.fr" />
-                </div>
-              )}
-              <div className="fg">
-                <label className="lbl">Périmètre géo *</label>
-                <select value={c.scope} onChange={e=>upd(c.id,'scope',e.target.value)}>
-                  {scopeOpts.map(r => <option key={r} value={r}>{r==='ALL'?'⬡ ALL — toutes régions':r}</option>)}
-                </select>
-              </div>
-              {showSlack && (
-                <div className="fg">
-                  <label className="lbl">Canal Slack</label>
-                  <input type="text" value={c.slack} onChange={e=>upd(c.id,'slack',e.target.value)} placeholder="#emt-alertes" />
-                </div>
-              )}
-            </div>
-            <div className="flex gap-5 mt-1">
-              <label className="flex items-center gap-2 cursor-pointer lbl mb-0">
-                <input type="checkbox" checked={c.alert} onChange={e=>upd(c.id,'alert',e.target.checked)} className="w-4 h-4 accent-red-500" />
-                <span className="text-sm text-slate-300">🔴 Alertes brûlantes</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer lbl mb-0">
-                <input type="checkbox" checked={c.digest} onChange={e=>upd(c.id,'digest',e.target.checked)} className="w-4 h-4 accent-orange-500" />
-                <span className="text-sm text-slate-300">📨 Digests quotidien/hebdo</span>
-              </label>
-            </div>
+      {/* ── C1.4 Préférences livraison ── */}
+      <div className="card p-4 mb-5">
+        <label className="lbl mb-2">Préférences livraison (timing & format)</label>
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="lbl">Heure digest quotidien</label>
+            <select value={st.delivery.digest_hour}
+              onChange={e=>set(s=>({...s, delivery:{...s.delivery, digest_hour: parseInt(e.target.value, 10)}}))}>
+              {Array.from({length: 24}, (_, h) => <option key={h} value={h}>{String(h).padStart(2,'0')}:00</option>)}
+            </select>
+            <p className="text-xs text-slate-500 mt-1">workflow DELIVER-DIGEST</p>
           </div>
-        ))}
+          <div>
+            <label className="lbl">Jour weekly tièdes</label>
+            <select value={st.delivery.weekly_day}
+              onChange={e=>set(s=>({...s, delivery:{...s.delivery, weekly_day: e.target.value}}))}>
+              {WEEKLY_DAYS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+            </select>
+            <p className="text-xs text-slate-500 mt-1">workflow DELIVER-WEEKLY-TIEDES (7h)</p>
+          </div>
+          <div>
+            <label className="lbl">Footer cumulatif</label>
+            <div className="flex items-center gap-2 mt-2">
+              <input type="checkbox" checked={st.delivery.footer_cumul}
+                onChange={e=>set(s=>({...s, delivery:{...s.delivery, footer_cumul: e.target.checked}}))}
+                className="w-4 h-4 accent-blue-500" />
+              <span className="text-sm text-slate-300">Activé</span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">ajoute en bas des emails le total signaux reçus sur la période</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Contacts ── */}
+      <div className="space-y-4 overflow-y-auto" style={{maxHeight:'380px'}}>
+        {st.contacts.map((c, idx) => {
+          const scopes = c.scopes || [];
+          const isAll = scopes.includes('ALL');
+          return (
+            <div key={c.id} className="card p-4">
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-sm font-semibold text-slate-300">
+                  Contact {idx+1} — <span className={c.role==='national'?'text-blue-400':'text-purple-400'}>{c.role}</span>
+                </span>
+                <button onClick={()=>del(c.id)} className="btn-del">Supprimer</button>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="fg">
+                  <label className="lbl">Nom</label>
+                  <input type="text" value={c.name} onChange={e=>upd(c.id,'name',e.target.value)} placeholder="ex: Marie Dupont" />
+                </div>
+                <div className="fg">
+                  <label className="lbl">Rôle *</label>
+                  <select value={c.role} onChange={e=>upd(c.id,'role',e.target.value)}>
+                    <option value="national">national — reçoit tout</option>
+                    <option value="regional">regional — filtré par région(s)</option>
+                  </select>
+                </div>
+                {showEmail && (
+                  <div className="fg">
+                    <label className="lbl">Email *</label>
+                    <input type="email" value={c.email} onChange={e=>upd(c.id,'email',e.target.value)} placeholder="ex: alertes@cabinet.fr" />
+                  </div>
+                )}
+                {showSlack && (
+                  <div className="fg">
+                    <label className="lbl">Canal Slack</label>
+                    <input type="text" value={c.slack} onChange={e=>upd(c.id,'slack',e.target.value)} placeholder="#emt-alertes" />
+                  </div>
+                )}
+              </div>
+
+              {/* C1.2 — Multi-scope régions (geographic_scope TEXT[]) */}
+              <div className="fg">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="lbl mb-0">Périmètre géo * <span className="font-normal text-slate-500">(multi-sélection — TEXT[])</span></label>
+                  <button type="button" onClick={()=>setScopeAll(c.id)}
+                    className={`btn-sm btn ${isAll ? 'btn-p' : 'btn-s'}`}>⬡ ALL</button>
+                </div>
+                {!isAll && st.regions.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {st.regions.map(r => (
+                      <span key={r} onClick={()=>toggleScope(c.id, r)}
+                        className={`chip ${scopes.includes(r) ? 'chip-on' : 'chip-off'}`}>
+                        {scopes.includes(r) && <span className="mr-1">✓</span>}{r}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {!isAll && scopes.length === 0 && (
+                  <p className="text-xs text-amber-500 mt-1">⚠ Sélectionnez au moins 1 région ou cliquez ALL</p>
+                )}
+                {isAll && (
+                  <p className="text-xs text-slate-500 mt-1">Reçoit tous les signaux — équivalent national</p>
+                )}
+              </div>
+
+              <div className="flex gap-5 mt-1 flex-wrap">
+                <label className="flex items-center gap-2 cursor-pointer lbl mb-0">
+                  <input type="checkbox" checked={c.alert} onChange={e=>upd(c.id,'alert',e.target.checked)} className="w-4 h-4 accent-red-500" />
+                  <span className="text-sm text-slate-300">🔴 Alertes brûlantes</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer lbl mb-0">
+                  <input type="checkbox" checked={!!c.digest_daily} onChange={e=>upd(c.id,'digest_daily',e.target.checked)} className="w-4 h-4 accent-orange-500" />
+                  <span className="text-sm text-slate-300">📨 Digest quotidien</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer lbl mb-0">
+                  <input type="checkbox" checked={!!c.digest_weekly} onChange={e=>upd(c.id,'digest_weekly',e.target.checked)} className="w-4 h-4 accent-amber-500" />
+                  <span className="text-sm text-slate-300">📅 Digest hebdo (tièdes)</span>
+                </label>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <button onClick={addContact} className="btn btn-s w-full mt-4 py-3 text-sm">+ Ajouter un contact</button>
       {st.contacts.length === 0 && <p className="text-center text-slate-500 text-sm mt-3">Au moins 1 contact requis</p>}
+
+      {/* ── C1.3 Bloc HubSpot (push CRM) ── */}
+      <div className="card p-4 mt-5" style={{borderColor: crmAvailable ? '#0e7490' : '#334155'}}>
+        <div className="flex items-center justify-between mb-3">
+          <label className="lbl mb-0 flex items-center gap-2">
+            <span>🔗 Push CRM HubSpot</span>
+            {crmAvailable
+              ? <span className="text-xs font-normal text-cyan-400">disponible (service_level={st.serviceLevel})</span>
+              : <span className="text-xs font-normal text-slate-500">indisponible (Bronze/Silver) — exige Gold/Platinum</span>}
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox"
+              checked={st.hubspot.enabled}
+              disabled={!crmAvailable}
+              onChange={e=>set(s=>({...s, hubspot:{...s.hubspot, enabled: e.target.checked}}))}
+              className="w-4 h-4 accent-cyan-500" />
+            <span className="text-sm text-slate-300">Activer</span>
+          </label>
+        </div>
+        {st.hubspot.enabled && crmAvailable && (
+          <div className="grid grid-cols-1 gap-3">
+            <div>
+              <label className="lbl">Token Private App HubSpot (PAT) <span className="text-slate-500 font-normal">— optionnel à la saisie</span></label>
+              <input type="password" value={st.hubspot.api_key}
+                onChange={e=>set(s=>({...s, hubspot:{...s.hubspot, api_key: e.target.value}}))}
+                placeholder="pat-xxxx-... (à compléter post-prestataire)" style={{fontFamily:'monospace', fontSize:'12px'}} />
+              <p className="text-xs text-slate-500 mt-1">
+                Scopes requis : <code>crm.objects.{`{companies,deals,contacts}`}.write</code>
+                {' · '}fourni par le prestataire HubSpot du client
+                {' · '}peut être complété en SQL plus tard
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="lbl">Pipeline ID</label>
+                <input type="text" value={st.hubspot.pipeline_id}
+                  onChange={e=>set(s=>({...s, hubspot:{...s.hubspot, pipeline_id: e.target.value}}))}
+                  placeholder="default ou ID custom" style={{fontFamily:'monospace', fontSize:'12px'}} />
+              </div>
+              <div>
+                <label className="lbl">Dealstage ID initial</label>
+                <input type="text" value={st.hubspot.dealstage_id}
+                  onChange={e=>set(s=>({...s, hubspot:{...s.hubspot, dealstage_id: e.target.value}}))}
+                  placeholder="appointmentscheduled" style={{fontFamily:'monospace', fontSize:'12px'}} />
+              </div>
+            </div>
+            <p className="text-xs text-slate-400">
+              Stocké dans <code className="text-slate-300">clients.crm_config</code> (JSONB) — workflow <code className="text-slate-300">S-CRM-HUBSPOT-PUSH</code>.
+              Triple guard : <code>hubspot_enabled</code> + <code>crm_push_approved</code> + <code>api_key</code> notEmpty.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -796,15 +1111,8 @@ function Step4({st, set}) {
 /* ─── Étape 5 ─── */
 function Step5({st}) {
   const [copied, setCopied] = useState(false);
-  const sql = useMemo(() => genSQL({
-    clientId: st.clientId, clientName: st.clientName,
-    geographyScope: st.geographyScope, regions: st.regions,
-    sources: st.sources, signals: st.signals,
-    contacts: st.contacts, channel: st.channel,
-    pkg: st.pkg,
-    serviceLevel: st.serviceLevel, featureFlags: st.featureFlags,
-    llmProfile: st.llmProfile, analysisDepth: st.analysisDepth
-  }), [st]);
+  // v2.0 — passe tout st : excludeGlobal + goldPrefs + hubspot + delivery
+  const sql = useMemo(() => genSQL(st), [st]);
 
   const copy = () => navigator.clipboard.writeText(sql).then(() => { setCopied(true); setTimeout(()=>setCopied(false),2000); });
   const dl   = () => {
@@ -820,7 +1128,9 @@ function Step5({st}) {
   const removed  = pkgChosen ? pkgSources.filter(s => !st.sources.includes(s)).length : 0;
   const isCustom = pkgChosen && (added > 0 || removed > 0);
 
-  const slIcon = {BRONZE:'🥉', SILVER:'🥈', GOLD:'🥇'};
+  const slIcon = {BRONZE:'🥉', SILVER:'🥈', GOLD:'🥇', PLATINUM:'💎'};
+  const dayLabel = (WEEKLY_DAYS.find(d => d.value === st.delivery.weekly_day) || {label: st.delivery.weekly_day}).label;
+  const isGoldPlus = st.serviceLevel === 'GOLD' || st.serviceLevel === 'PLATINUM';
 
   return (
     <div>
@@ -862,26 +1172,71 @@ function Step5({st}) {
             <p className="text-xs text-slate-500 uppercase tracking-wider">Signaux</p>
             <p className="font-semibold">{st.signals.length} / {SIGNALS.length} signaux actifs</p>
           </div>
+          {/* v2.0 — Livraison */}
+          <div>
+            <p className="text-xs text-slate-500 uppercase tracking-wider">Livraison</p>
+            <p className="text-sm">Digest <span className="font-mono text-slate-300">{String(st.delivery.digest_hour).padStart(2,'0')}:00</span> · Weekly <span className="text-slate-300">{dayLabel}</span></p>
+            <p className="text-xs text-slate-500">Footer cumul : {st.delivery.footer_cumul ? '✓ activé' : '✕ désactivé'}</p>
+          </div>
+          {/* v2.0 — HubSpot */}
+          <div>
+            <p className="text-xs text-slate-500 uppercase tracking-wider">Push CRM HubSpot</p>
+            {st.hubspot.enabled ? (
+              <>
+                <p className="font-semibold text-cyan-400">🔗 Activé</p>
+                <p className="text-xs text-slate-500">
+                  PAT : {st.hubspot.api_key ? '✓ fourni' : '⚠ manquant'}
+                  {st.hubspot.pipeline_id && ` · pipeline=${st.hubspot.pipeline_id}`}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-slate-500">Désactivé</p>
+            )}
+          </div>
+          {/* v2.0 — Préférences Gold/Platinum (filtres entreprise cible) */}
+          {isGoldPlus && (
+            <div className="col-span-2">
+              <p className="text-xs text-slate-500 uppercase tracking-wider">Préférences {st.serviceLevel === 'PLATINUM' ? 'Platinum' : 'Gold'} (filtres entreprise)</p>
+              <p className="text-sm">
+                {(st.goldPrefs.ca_min_keur || st.goldPrefs.ca_max_keur)
+                  ? <span>CA : <span className="text-slate-300">{st.goldPrefs.ca_min_keur || '?'} – {st.goldPrefs.ca_max_keur || '?'} k€</span></span>
+                  : <span className="text-slate-500">CA : tout</span>}
+                {(st.goldPrefs.effectif_min || st.goldPrefs.effectif_max) && (
+                  <span> · Effectif : <span className="text-slate-300">{st.goldPrefs.effectif_min || '?'} – {st.goldPrefs.effectif_max || '?'}</span></span>
+                )}
+              </p>
+              {st.goldPrefs.sectors_excluded.length > 0 && (
+                <p className="text-xs text-slate-500 mt-1">
+                  {st.goldPrefs.sectors_excluded.length} secteur(s) exclu(s) : <span className="text-slate-400">{st.goldPrefs.sectors_excluded.slice(0, 3).join(', ')}{st.goldPrefs.sectors_excluded.length > 3 ? '…' : ''}</span>
+                </p>
+              )}
+            </div>
+          )}
         </div>
         {st.contacts.length > 0 && (
           <div>
             <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Contacts ({st.contacts.length})</p>
             <div className="space-y-1.5">
-              {st.contacts.map(c => (
-                <div key={c.id} className="flex items-center gap-2.5 text-sm rounded-lg p-2" style={{background:'rgba(15,23,42,0.5)'}}>
-                  <span className="tag text-xs" style={c.role==='national'?{background:'#1e3a8a',color:'#93c5fd'}:{background:'#3b0764',color:'#d8b4fe'}}>
-                    {c.role}
-                  </span>
-                  <span className="font-medium">{c.name||'(sans nom)'}</span>
-                  <span className="text-slate-400 text-xs">{c.email||'—'}</span>
-                  <span className="text-slate-500 text-xs ml-1">{c.scope}</span>
-                  {c.slack && <span className="text-green-400 text-xs font-mono">{c.slack}</span>}
-                  <div className="flex gap-1 ml-auto">
-                    {c.alert  && <span className="text-xs">🔴</span>}
-                    {c.digest && <span className="text-xs">📨</span>}
+              {st.contacts.map(c => {
+                const scopes = c.scopes || [];
+                const scopeLabel = scopes.includes('ALL') ? 'ALL' : (scopes.length <= 2 ? scopes.join('+') : `${scopes.length} régions`);
+                return (
+                  <div key={c.id} className="flex items-center gap-2.5 text-sm rounded-lg p-2" style={{background:'rgba(15,23,42,0.5)'}}>
+                    <span className="tag text-xs" style={c.role==='national'?{background:'#1e3a8a',color:'#93c5fd'}:{background:'#3b0764',color:'#d8b4fe'}}>
+                      {c.role}
+                    </span>
+                    <span className="font-medium">{c.name||'(sans nom)'}</span>
+                    <span className="text-slate-400 text-xs">{c.email||'—'}</span>
+                    <span className="text-slate-500 text-xs ml-1" title={scopes.join(', ')}>{scopeLabel}</span>
+                    {c.slack && <span className="text-green-400 text-xs font-mono">{c.slack}</span>}
+                    <div className="flex gap-1 ml-auto">
+                      {c.alert         && <span className="text-xs">🔴</span>}
+                      {c.digest_daily  && <span className="text-xs">📨</span>}
+                      {c.digest_weekly && <span className="text-xs">📅</span>}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -907,8 +1262,14 @@ function canNext(step, st) {
   if (step === 1) return st.clientName.trim() && st.clientId.trim() && st.regions.length > 0 && st.serviceLevel;
   if (step === 2) return st.sources.length > 0;
   if (step === 3) return st.signals.length > 0;
-  if (step === 4) return st.contacts.length > 0 &&
-    (st.channel === 'slack' || st.contacts.every(c => c.email.trim()));
+  if (step === 4) {
+    if (st.contacts.length === 0) return false;
+    if (st.channel !== 'slack' && !st.contacts.every(c => c.email.trim())) return false;
+    // C1.2 — Tout contact doit avoir au moins une région (ou 'ALL')
+    if (!st.contacts.every(c => (c.scopes || []).length > 0)) return false;
+    // C1.3 — HubSpot : PAT optionnel à la saisie (peut être complété post-prestataire)
+    return true;
+  }
   return true;
 }
 
@@ -916,7 +1277,7 @@ const MSG = {
   1: 'Requis : Nom du cabinet · Client ID · au moins 1 région · niveau de service',
   2: 'Sélectionnez au moins 1 source',
   3: 'Sélectionnez au moins 1 signal',
-  4: 'Ajoutez au moins 1 contact avec email',
+  4: 'Requis : 1+ contact avec email · scope géo (≥1 région ou ALL par contact)',
 };
 
 /* ══════════════════════════════════════════════
@@ -929,8 +1290,27 @@ const INIT = {
   pkg:null, sources:[],
   signals: SIGNALS.map(s=>s.sid),
   channel:'email',
-  contacts:[{id:1, name:'', email:'', role:'national', scope:'ALL', slack:'', alert:true, digest:true}],
+  contacts:[{id:1, name:'', email:'', role:'national', scopes:['ALL'], slack:'', alert:true, digest_daily:true, digest_weekly:true}],
   excludeGlobal: DEFAULT_EXCLUDE_GLOBAL,
+  // C1.1 — Préférences Gold/Platinum (affichées conditionnellement)
+  goldPrefs: {
+    ca_min_keur: '', ca_max_keur: '',
+    effectif_min: '', effectif_max: '',
+    sectors_excluded: [],
+  },
+  // C1.3 — Bloc HubSpot (push CRM)
+  hubspot: {
+    enabled: false,
+    api_key: '',
+    pipeline_id: '',
+    dealstage_id: '',
+  },
+  // C1.4 — Préférences livraison
+  delivery: {
+    digest_hour: 8,
+    weekly_day: 'friday',
+    footer_cumul: true,
+  },
 };
 
 function App() {
@@ -954,7 +1334,7 @@ function App() {
           <img src="logo-signalai.png"
                alt="SignalAi" className="h-8 w-8 rounded-lg object-cover" />
           <span className="text-white text-sm"><strong>SignalAi</strong>&nbsp;&nbsp;Onboarding Form</span>
-          <span className="ml-auto text-xs text-slate-600 font-mono">v1.6 · 2026-04-23</span>
+          <span className="ml-auto text-xs text-slate-600 font-mono">v2.0 · 2026-05-17</span>
         </div>
       </div>
 
