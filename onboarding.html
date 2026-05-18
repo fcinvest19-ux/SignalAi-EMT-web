@@ -18,10 +18,13 @@
     .chip-on  { background: #1d4ed8; color: white; }
     .chip-off { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
     .chip:hover { opacity: 0.85; }
-    input[type="text"], input[type="email"], select {
+    input[type="text"], input[type="email"], input[type="number"], select {
       background: #1e293b; border: 1px solid #334155; border-radius: 6px;
       color: #e2e8f0; padding: 8px 12px; width: 100%; outline: none; }
     input:focus, select:focus { border-color: #2563eb; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type="number"] { -moz-appearance: textfield; }
     select option { background: #1e293b; }
     .card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; }
     .card-sel { border-color: #2563eb !important; background: rgba(30,58,138,0.15) !important; }
@@ -269,8 +272,8 @@ function genSQL(st) {
   const isGoldPlus = serviceLevel === 'GOLD' || serviceLevel === 'PLATINUM';
   const numOrNull = v => (v === '' || v == null) ? null : (parseInt(v, 10) || null);
   const sc = isGoldPlus && goldPrefs ? {
-    ca_min_keur:  numOrNull(goldPrefs.ca_min_keur),
-    ca_max_keur:  numOrNull(goldPrefs.ca_max_keur),
+    ca_min_meur:  numOrNull(goldPrefs.ca_min_meur),
+    ca_max_meur:  numOrNull(goldPrefs.ca_max_meur),
     effectif_min: numOrNull(goldPrefs.effectif_min),
     effectif_max: numOrNull(goldPrefs.effectif_max),
     sectors_excluded: goldPrefs.sectors_excluded || [],
@@ -448,10 +451,10 @@ function Step1({st, set}) {
   };
 
   const slDetails = [
-    {level:'BRONZE',   icon:'🥉', label:'Bronze',   desc:'Scoring basique · presse nationale',          llm:'light',    depth:1},
-    {level:'SILVER',   icon:'🥈', label:'Silver',   desc:'Scoring avancé + enrichissement',             llm:'standard', depth:2},
-    {level:'GOLD',     icon:'🥇', label:'Gold',     desc:'Enrichissement complet multi-pass',           llm:'advanced', depth:3},
-    {level:'PLATINUM', icon:'💎', label:'Platinum', desc:'Gold + scoring spécifique client + push CRM', llm:'advanced', depth:3},
+    {level:'BRONZE',   icon:'🥉', label:'Bronze',   desc:'Scoring mutualisé single pass · enrichissement standard (3 talking points) · presse nationale'},
+    {level:'SILVER',   icon:'🥈', label:'Silver',   desc:'Scoring mutualisé + double pass zones grises · enrichissement (4 TP + risques partenaires) · sectorielles'},
+    {level:'GOLD',     icon:'🥇', label:'Gold',     desc:'Scoring spécifique client + double pass · enrichissement Pass 2 Gold (Opus + Perplexity + LinkedIn) · push CRM'},
+    {level:'PLATINUM', icon:'💎', label:'Platinum', desc:'Tout Gold + prompt enrichissement spécifique cabinet (méthode propriétaire encapsulée)'},
   ];
 
   return (
@@ -520,11 +523,11 @@ function Step1({st, set}) {
       <div style={{borderTop:'1px solid #1e293b', paddingTop:'20px', marginTop:'4px'}}>
         <h3 style={{marginBottom:'4px'}}>Niveau de service *</h3>
         <p className="text-slate-400 text-sm mb-4">
-          Détermine la profondeur d'analyse IA, les feature flags et le profil LLM.
+          Détermine le scoring (mutualisé vs spécifique client), l'enrichissement (templates et activation du Pass 2 Gold) et les feature flags.
           Le package sources correspondant est pré-chargé en étape 2 mais reste modifiable indépendamment.
         </p>
         <div className="grid grid-cols-3 gap-3">
-          {slDetails.map(({level, icon, label, desc, llm, depth}) => {
+          {slDetails.map(({level, icon, label, desc}) => {
             const isOn = st.serviceLevel === level;
             const cls = slCls[level];
             return (
@@ -533,9 +536,6 @@ function Step1({st, set}) {
                 <div className="text-2xl mb-1">{icon}</div>
                 <div className="font-bold text-base">{label}</div>
                 <div className="text-xs text-slate-400 mt-1">{desc}</div>
-                <div className="text-xs font-mono text-slate-500 mt-2">
-                  llm={llm} · depth={depth}
-                </div>
                 {isOn && <div className="text-xs text-blue-400 mt-1 font-medium">✓ Sélectionné</div>}
               </div>
             );
@@ -563,27 +563,27 @@ function Step1({st, set}) {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="fg">
-              <label className="lbl" style={{color:'#e2e8f0'}}>CA cible min (k€) — laisser vide si pas de seuil</label>
-              <input type="number" min="0" value={st.goldPrefs.ca_min_keur}
-                onChange={e=>set(s=>({...s, goldPrefs:{...s.goldPrefs, ca_min_keur:e.target.value}}))}
-                placeholder="ex: 10000 (= 10 M€)" />
+              <label className="lbl" style={{color:'#e2e8f0'}}>CA cible min (M€) — laisser vide si pas de seuil</label>
+              <input type="text" inputMode="numeric" pattern="[0-9]*" value={st.goldPrefs.ca_min_meur}
+                onChange={e=>set(s=>({...s, goldPrefs:{...s.goldPrefs, ca_min_meur:e.target.value.replace(/[^0-9]/g,'')}}))}
+                placeholder="ex: 10 (= 10 M€)" />
             </div>
             <div className="fg">
-              <label className="lbl" style={{color:'#e2e8f0'}}>CA cible max (k€)</label>
-              <input type="number" min="0" value={st.goldPrefs.ca_max_keur}
-                onChange={e=>set(s=>({...s, goldPrefs:{...s.goldPrefs, ca_max_keur:e.target.value}}))}
-                placeholder="ex: 500000 (= 500 M€)" />
+              <label className="lbl" style={{color:'#e2e8f0'}}>CA cible max (M€)</label>
+              <input type="text" inputMode="numeric" pattern="[0-9]*" value={st.goldPrefs.ca_max_meur}
+                onChange={e=>set(s=>({...s, goldPrefs:{...s.goldPrefs, ca_max_meur:e.target.value.replace(/[^0-9]/g,'')}}))}
+                placeholder="ex: 500 (= 500 M€)" />
             </div>
             <div className="fg">
               <label className="lbl" style={{color:'#e2e8f0'}}>Effectif cible min</label>
-              <input type="number" min="0" value={st.goldPrefs.effectif_min}
-                onChange={e=>set(s=>({...s, goldPrefs:{...s.goldPrefs, effectif_min:e.target.value}}))}
+              <input type="text" inputMode="numeric" pattern="[0-9]*" value={st.goldPrefs.effectif_min}
+                onChange={e=>set(s=>({...s, goldPrefs:{...s.goldPrefs, effectif_min:e.target.value.replace(/[^0-9]/g,'')}}))}
                 placeholder="ex: 50" />
             </div>
             <div className="fg">
               <label className="lbl" style={{color:'#e2e8f0'}}>Effectif cible max</label>
-              <input type="number" min="0" value={st.goldPrefs.effectif_max}
-                onChange={e=>set(s=>({...s, goldPrefs:{...s.goldPrefs, effectif_max:e.target.value}}))}
+              <input type="text" inputMode="numeric" pattern="[0-9]*" value={st.goldPrefs.effectif_max}
+                onChange={e=>set(s=>({...s, goldPrefs:{...s.goldPrefs, effectif_max:e.target.value.replace(/[^0-9]/g,'')}}))}
                 placeholder="ex: 5000" />
             </div>
           </div>
@@ -682,7 +682,6 @@ function Step2({st, set}) {
           style={{background:'rgba(30,41,59,0.6)', border:'1px solid #334155'}}>
           <span className="text-slate-400">Niveau de service :</span>
           <span className="font-semibold text-blue-400 font-mono">{st.serviceLevel}</span>
-          <span className="text-slate-500">· llm={st.llmProfile} · depth={st.analysisDepth}</span>
           <span className="text-slate-600 ml-auto italic">défini en étape 1 — modifier là-bas</span>
         </div>
       )}
@@ -1114,12 +1113,24 @@ function Step5({st}) {
   // v2.0 — passe tout st : excludeGlobal + goldPrefs + hubspot + delivery
   const sql = useMemo(() => genSQL(st), [st]);
 
-  const copy = () => navigator.clipboard.writeText(sql).then(() => { setCopied(true); setTimeout(()=>setCopied(false),2000); });
-  const dl   = () => {
+  const copy = (e) => {
+    if (e) e.preventDefault();
+    navigator.clipboard.writeText(sql).then(() => { setCopied(true); setTimeout(()=>setCopied(false),2000); });
+  };
+  const dl = (e) => {
+    if (e) e.preventDefault();
+    const blob = new Blob([sql], {type:'text/plain;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([sql], {type:'text/plain;charset=utf-8'}));
+    a.href = url;
     a.download = `onboarding_${st.clientId}.sql`;
+    a.style.display = 'none';
+    document.body.appendChild(a);
     a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
   };
 
   const pkgChosen = st.pkg;
@@ -1152,9 +1163,6 @@ function Step5({st}) {
             <p className="text-xs text-slate-500 uppercase tracking-wider">Niveau de service</p>
             <p className="font-semibold text-base">
               {slIcon[st.serviceLevel] || ''} {st.serviceLevel || '—'}
-            </p>
-            <p className="text-xs font-mono text-slate-400 mt-0.5">
-              llm={st.llmProfile||'—'} · depth={st.analysisDepth ?? '—'}
             </p>
           </div>
           <div>
@@ -1198,8 +1206,8 @@ function Step5({st}) {
             <div className="col-span-2">
               <p className="text-xs text-slate-500 uppercase tracking-wider">Préférences {st.serviceLevel === 'PLATINUM' ? 'Platinum' : 'Gold'} (filtres entreprise)</p>
               <p className="text-sm">
-                {(st.goldPrefs.ca_min_keur || st.goldPrefs.ca_max_keur)
-                  ? <span>CA : <span className="text-slate-300">{st.goldPrefs.ca_min_keur || '?'} – {st.goldPrefs.ca_max_keur || '?'} k€</span></span>
+                {(st.goldPrefs.ca_min_meur || st.goldPrefs.ca_max_meur)
+                  ? <span>CA : <span className="text-slate-300">{st.goldPrefs.ca_min_meur || '?'} – {st.goldPrefs.ca_max_meur || '?'} M€</span></span>
                   : <span className="text-slate-500">CA : tout</span>}
                 {(st.goldPrefs.effectif_min || st.goldPrefs.effectif_max) && (
                   <span> · Effectif : <span className="text-slate-300">{st.goldPrefs.effectif_min || '?'} – {st.goldPrefs.effectif_max || '?'}</span></span>
@@ -1243,8 +1251,8 @@ function Step5({st}) {
       </div>
 
       <div className="flex gap-3 mb-3">
-        <button onClick={copy} className="btn btn-p flex-1">{copied ? '✓ Copié !' : '📋 Copier le SQL'}</button>
-        <button onClick={dl}   className="btn btn-s flex-1">💾 Télécharger .sql</button>
+        <button type="button" onClick={copy} className="btn btn-p flex-1">{copied ? '✓ Copié !' : '📋 Copier le SQL'}</button>
+        <button type="button" onClick={dl}   className="btn btn-s flex-1">💾 Télécharger .sql</button>
       </div>
       <div className="mb-3">
         <span className="text-xs text-slate-500">Exécution : </span>
@@ -1294,7 +1302,7 @@ const INIT = {
   excludeGlobal: DEFAULT_EXCLUDE_GLOBAL,
   // C1.1 — Préférences Gold/Platinum (affichées conditionnellement)
   goldPrefs: {
-    ca_min_keur: '', ca_max_keur: '',
+    ca_min_meur: '', ca_max_meur: '',
     effectif_min: '', effectif_max: '',
     sectors_excluded: [],
   },
