@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SignalAi — Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- HEADER -->
+<header id="header">
+  <div id="logo"><img id="logo-icon" src="logo-signalai.png" alt="SignalAi logo"><span class="brand"><span class="brand-signal">Signal</span><span class="brand-ai">Ai</span></span></div>
+  <div id="client-info">
+    <span id="client-name">Chargement…</span>
+    <span id="client-tier" style="display:none"></span>
+  </div>
+  <div class="header-spacer"></div>
+  <select id="range-select">
+    <option value="24h">24h glissantes</option>
+    <option value="48h">48h glissantes</option>
+    <option value="72h">72h glissantes</option>
+    <option value="today">Aujourd'hui</option>
+    <option value="week">Semaine en cours</option>
+    <option value="7d" selected>7 jours (défaut)</option>
+    <option value="30d">30 jours</option>
+    <option value="month">Mois en cours</option>
+    <option value="all">Tout</option>
+  </select>
+</header>
+
+<!-- NAV TABS -->
+<nav id="nav-tabs">
+  <button class="tab-btn active" data-view="agg">Agrégé</button>
+  <button class="tab-btn" data-view="list">Liste</button>
+  <button class="tab-btn" data-view="item" id="tab-item" style="display:none">Fiche</button>
+</nav>
+
+<!-- APP -->
+<div id="app">
+
+  <!-- SIDEBAR FILTERS -->
+  <aside id="sidebar">
+
+    <details class="filter-group" open>
+      <summary>Chaleur</summary>
+      <div class="filter-options">
+        <div class="filter-actions">
+          <button class="filter-btn-sm" data-group="heats" data-action="all">Tout</button>
+          <button class="filter-btn-sm" data-group="heats" data-action="none">Aucun</button>
+        </div>
+        <label class="filter-option"><input type="checkbox" name="heats" value="brulant"> <span class="heat-badge heat-brulant">🔥 Brûlant</span></label>
+        <label class="filter-option"><input type="checkbox" name="heats" value="chaud"> <span class="heat-badge heat-chaud">🌡 Chaud</span></label>
+        <label class="filter-option"><input type="checkbox" name="heats" value="tiede"> <span class="heat-badge heat-tiede">🌤 Tiède</span></label>
+        <label class="filter-option"><input type="checkbox" name="heats" value="froid" data-also="glace"> <span class="heat-badge heat-froid">❄ Froid / Glacé</span></label>
+      </div>
+    </details>
+
+    <details class="filter-group">
+      <summary>Verdict</summary>
+      <div class="filter-options">
+        <div class="filter-actions">
+          <button class="filter-btn-sm" data-group="verdicts" data-action="all">Tout</button>
+          <button class="filter-btn-sm" data-group="verdicts" data-action="none">Aucun</button>
+        </div>
+        <label class="filter-option"><input type="checkbox" name="verdicts" value="APPROUVE"> ✅ Approuvé</label>
+        <label class="filter-option"><input type="checkbox" name="verdicts" value="A_CREUSER"> 🔍 À creuser</label>
+        <label class="filter-option"><input type="checkbox" name="verdicts" value="ECARTE"> ❌ Écarté</label>
+        <label class="filter-option"><input type="checkbox" name="verdicts" value="attente"> ⏳ En attente</label>
+      </div>
+    </details>
+
+    <details class="filter-group">
+      <summary>Enrichissement</summary>
+      <div class="filter-options">
+        <div class="filter-actions">
+          <button class="filter-btn-sm" data-group="triggers" data-action="all">Tout</button>
+          <button class="filter-btn-sm" data-group="triggers" data-action="none">Aucun</button>
+        </div>
+        <label class="filter-option"><input type="checkbox" name="triggers" value="AUTO"> Automatique</label>
+        <label class="filter-option"><input type="checkbox" name="triggers" value="HUMAN_GATE"> Sur demande</label>
+        <label class="filter-option"><input type="checkbox" name="triggers" value="STUCK_REPLAY_DEBLOCK"> Récupération</label>
+        <label class="filter-option"><input type="checkbox" name="triggers" value="MANUAL"> Manuel</label>
+      </div>
+    </details>
+
+    <details class="filter-group">
+      <summary>Canal livraison</summary>
+      <div class="filter-options">
+        <div class="filter-actions">
+          <button class="filter-btn-sm" data-group="channels" data-action="all">Tout</button>
+          <button class="filter-btn-sm" data-group="channels" data-action="none">Aucun</button>
+        </div>
+        <label class="filter-option"><input type="checkbox" name="channels" value="ALERT"> <span class="canal-badge canal-ALERT">ALERT</span></label>
+        <label class="filter-option"><input type="checkbox" name="channels" value="DIGEST"> <span class="canal-badge canal-DIGEST">DIGEST</span></label>
+        <label class="filter-option"><input type="checkbox" name="channels" value="WEEKLY"> <span class="canal-badge canal-WEEKLY">WEEKLY</span></label>
+        <label class="filter-option"><input type="checkbox" name="channels" value="REDELIVERY"> <span class="canal-badge canal-REDELIVERY">REDELIVERY</span></label>
+        <label class="filter-option"><input type="checkbox" name="channels" value="non_livre"> Non livré</label>
+      </div>
+    </details>
+
+    <details class="filter-group">
+      <summary>Sources</summary>
+      <div class="filter-options" id="sources-filter-options">
+        <div class="filter-actions">
+          <button class="filter-btn-sm" data-group="sources" data-action="all">Tout</button>
+          <button class="filter-btn-sm" data-group="sources" data-action="none">Aucun</button>
+        </div>
+        <div class="loading-msg" style="padding:8px 0;font-size:12px;">Chargement…</div>
+      </div>
+    </details>
+
+    <details class="filter-group">
+      <summary>Région</summary>
+      <div class="filter-options" id="regions-filter-options">
+        <div class="filter-actions">
+          <button class="filter-btn-sm" data-group="regions" data-action="all">Tout</button>
+          <button class="filter-btn-sm" data-group="regions" data-action="none">Aucun</button>
+        </div>
+        <div class="loading-msg" style="padding:8px 0;font-size:12px;">Chargement…</div>
+      </div>
+    </details>
+
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main id="main-content">
+
+    <!-- VUE AGRÉGÉE -->
+    <div id="view-agg" class="view active">
+      <div id="agg-loading" class="loading-msg">Chargement des données…</div>
+      <div id="agg-error" class="error-banner" style="display:none">
+        <strong>Erreur de chargement</strong>
+        <span id="agg-error-msg"></span>
+      </div>
+      <div id="agg-content" style="display:none">
+        <div id="kpi-grid"></div>
+        <div id="funnel-section">
+          <h3>Entonnoir pipeline</h3>
+          <div class="funnel-container" id="funnel-container"></div>
+        </div>
+        <div id="source-perf-section">
+          <h3>Performance par source — efficacité REGEX, pertinence & rendement</h3>
+          <div class="table-wrap">
+            <table id="source-perf-table">
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th title="Items collectés depuis le flux (pipeline_run_stats). Pour les sources sans REGEX (BODACC/BOAMP/FUSACQ), valeur = items en raw_items.">Collectés</th>
+                  <th title="Items qui ont passé le filtre REGEX (RSS uniquement).">REGEX-pass</th>
+                  <th title="% d'items filtrés par REGEX (= rejetés). Élevé = REGEX bien calibré.">Efficacité REGEX</th>
+                  <th title="Items scorés en base (raw_items). Pour RSS : plafonné à REGEX-pass (décalage temporel).">Scorés</th>
+                  <th title="Items scorés avec chaleur ≥ tiède (brûlant + chaud + tiède).">Pertinents</th>
+                  <th title="% d'items pertinents parmi les scorés (pertinents / scorés). Reflète la qualité nutritive de la source.">Pertinence</th>
+                  <th title="% d'items déjà vus / dupliqués (poll churning).">Dédup</th>
+                  <th title="% d'items collectés qui aboutissent en base.">Rendement</th>
+                </tr>
+              </thead>
+              <tbody id="source-perf-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="charts-row">
+          <div class="chart-card">
+            <h3>Type d'enrichissement</h3>
+            <div id="donut-enrich-wrap" class="donut-wrap">
+              <canvas id="donut-enrich" width="100" height="100"></canvas>
+              <div class="donut-legend" id="donut-enrich-legend"></div>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h3>Canal de livraison</h3>
+            <div id="donut-livraison-wrap" class="donut-wrap">
+              <canvas id="donut-livraison" width="100" height="100"></canvas>
+              <div class="donut-legend" id="donut-livraison-legend"></div>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h3 id="ratios-card-title">Ratios d'efficacité</h3>
+            <div class="ratios-grid" id="ratios-grid"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VUE LISTE -->
+    <div id="view-list" class="view">
+      <div id="list-controls">
+        <input type="text" id="search-input" placeholder="Rechercher entreprise ou titre…">
+        <select class="sort-select" id="sort-select">
+          <option value="created_at_desc">Date ↓</option>
+          <option value="created_at_asc">Date ↑</option>
+          <option value="confidence_desc">Confiance ↓</option>
+          <option value="confidence_asc">Confiance ↑</option>
+        </select>
+        <span id="list-count"></span>
+      </div>
+      <div id="list-loading" class="loading-msg">Chargement…</div>
+      <div id="list-error" class="error-banner" style="display:none">
+        <strong>Erreur</strong><span id="list-error-msg"></span>
+      </div>
+      <div id="list-content" style="display:none">
+        <div class="table-wrap">
+          <table id="items-table">
+            <thead>
+              <tr>
+                <th class="col-date">Date</th>
+                <th>Source</th>
+                <th>Entreprise</th>
+                <th>Région</th>
+                <th>Titre</th>
+                <th>Chaleur</th>
+                <th>Enrich</th>
+                <th>Canal</th>
+                <th>Verdict</th>
+                <th class="col-arrow">→</th>
+              </tr>
+            </thead>
+            <tbody id="items-tbody"></tbody>
+          </table>
+        </div>
+        <div id="pagination">
+          <button class="page-btn" id="btn-prev">← Préc.</button>
+          <span id="page-info"></span>
+          <button class="page-btn" id="btn-next">Suiv. →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VUE FICHE -->
+    <div id="view-item" class="view">
+      <button id="item-back-btn">← Retour à la liste</button>
+      <div id="item-loading" class="loading-msg">Chargement…</div>
+      <div id="item-error" class="error-banner" style="display:none">
+        <strong>Erreur</strong><span id="item-error-msg"></span>
+      </div>
+      <div id="item-content" style="display:none"></div>
+    </div>
+
+  </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
