@@ -140,8 +140,8 @@ const SOURCES = [
   {id:'API_FUSACQ_COM',          name:'Fusacq — Actualité M&A Internationale',                    type:'HTTP_API', cat:'Décideurs CF/M&A',        geo:'international',     pay:false, pkg:'Gold',   on:false},
   {id:'APIFY_DECIDEURS_RH',      name:'Decideurs RH — Nominations',                               type:'APIFY',    cat:'Décideurs RH',            geo:'national',          pay:false, pkg:'Gold',   on:true},
   {id:'API_FUSACQ_FR',           name:'Fusacq — Actualité M&A France',                            type:'HTTP_API', cat:'Finance/M&A',             geo:'national',          pay:false, pkg:'Gold',   on:false},
-  {id:'APIFY_CFNEWS_LBO',        name:'CFnews — LBO',                                             type:'APIFY',    cat:'Finance/M&A',             geo:'national',          pay:false, pkg:'Gold',   on:false},
-  {id:'APIFY_CFNEWS_MA',         name:'CFnews — M&A',                                             type:'APIFY',    cat:'Finance/M&A',             geo:'national',          pay:false, pkg:'Gold',   on:false},
+  {id:'APIFY_CFNEWS_LBO',        name:'CFnews — LBO',                                             type:'APIFY',    cat:'Finance/M&A',             geo:'national',          pay:false, pkg:'Gold',   on:false}, // DÉPRÉCIÉ S-168 → remplacé par RSS_CFNEWS_LBO
+  {id:'APIFY_CFNEWS_MA',         name:'CFnews — M&A',                                             type:'APIFY',    cat:'Finance/M&A',             geo:'national',          pay:false, pkg:'Gold',   on:false}, // DÉPRÉCIÉ S-168 → remplacé par RSS_CFNEWS_MA
   {id:'RSS_ARS_PDL_01',          name:'ARS PDL Actu',                                             type:'RSS',      cat:'Institutionnels régionaux',geo:'Pays de la Loire',  pay:false, pkg:'Gold',   on:true},
   {id:'RSS_CAR_FR_01',           name:'Carif-Oref National',                                      type:'RSS',      cat:'Institutionnels régionaux',geo:'national',          pay:false, pkg:'Gold',   on:true},
   {id:'RSS_CAR_PDL_01',          name:'Carif-Oref Pays de la Loire',                              type:'RSS',      cat:'Institutionnels régionaux',geo:'Pays de la Loire',  pay:false, pkg:'Gold',   on:true},
@@ -155,6 +155,20 @@ const SOURCES = [
   {id:'RSS_PDL_RH_EO',           name:'PDL-career Encadrement opérationnel',                      type:'RSS',      cat:'RH/Emploi cadres',        geo:'Pays de la Loire',  pay:false, pkg:'Gold',   on:true},
   {id:'RSS_PDL_RH_ES',           name:'PDL-career Encadrement stratégique',                       type:'RSS',      cat:'RH/Emploi cadres',        geo:'Pays de la Loire',  pay:false, pkg:'Gold',   on:true},
   {id:'RSS_PDL_RH_MP',           name:'PDL-career Management de projet',                          type:'RSS',      cat:'RH/Emploi cadres',        geo:'Pays de la Loire',  pay:false, pkg:'Gold',   on:true},
+  // ── CFNEWS RSS (S-168) — 13 flux officiels, tier éditorial Bronze/Silver/Gold ──
+  {id:'RSS_CFNEWS_ACTU',         name:"CFNEWS : L'actualité",                                     type:'RSS',      cat:'Presse éco nationale',    geo:'national',          pay:false, pkg:'Bronze', on:true},
+  {id:'RSS_CFNEWS_GEN',          name:'CFNEWS : Marché Général',                                  type:'RSS',      cat:'Presse éco nationale',    geo:'national',          pay:false, pkg:'Bronze', on:true},
+  {id:'RSS_CFNEWS_ALERTES',      name:'CFNEWS : Les alertes de CFNEWS',                           type:'RSS',      cat:'Presse éco nationale',    geo:'national',          pay:false, pkg:'Bronze', on:true},
+  {id:'RSS_CFNEWS_CAP_DEV',      name:'CFNEWS : Capital développement',                           type:'RSS',      cat:'Finance/M&A',             geo:'national',          pay:false, pkg:'Silver', on:true},
+  {id:'RSS_CFNEWS_CAP_INNOV',    name:'CFNEWS : Capital innovation',                              type:'RSS',      cat:'Finance/M&A',             geo:'national',          pay:false, pkg:'Silver', on:true},
+  {id:'RSS_CFNEWS_INTERNATIONAL',name:'CFNEWS : International',                                   type:'RSS',      cat:'Presse internationale',   geo:'international',     pay:false, pkg:'Silver', on:true},
+  {id:'RSS_CFNEWS_NOMINATIONS',  name:'CFNEWS : Nominations',                                     type:'RSS',      cat:'RH/Emploi cadres',        geo:'national',          pay:false, pkg:'Silver', on:true},
+  {id:'RSS_CFNEWS_FINANCE_RH',   name:"CFNEWS : Offres d'emploi du Corporate Finance",            type:'RSS',      cat:'RH/Emploi cadres',        geo:'national',          pay:false, pkg:'Silver', on:true},
+  {id:'RSS_CFNEWS_TECH',         name:'CFNEWS : Tech',                                            type:'RSS',      cat:'Presse tech/innovation',  geo:'national',          pay:false, pkg:'Silver', on:true},
+  {id:'RSS_CFNEWS_LBO',          name:'CFNEWS : LBO',                                             type:'RSS',      cat:'Finance/M&A',             geo:'national',          pay:false, pkg:'Gold',   on:true},
+  {id:'RSS_CFNEWS_EXCLU',        name:'CFNEWS : Exclusif CFNEWS',                                 type:'RSS',      cat:'Finance/M&A',             geo:'national',          pay:false, pkg:'Gold',   on:true},
+  {id:'RSS_CFNEWS_MA',           name:'CFNEWS : M&A Corporate',                                   type:'RSS',      cat:'Finance/M&A',             geo:'national',          pay:false, pkg:'Gold',   on:true},
+  {id:'RSS_CFNEWS_RETOURNEMENT', name:'CFNEWS : Retournement',                                    type:'RSS',      cat:'Finance/M&A',             geo:'national',          pay:false, pkg:'Gold',   on:true},
   // ── EN COURS DE QUALIFICATION (sans package) ──
   {id:'API_INPI_RNE',            name:'INPI RNE — Registre National Entreprises',                 type:'HTTP_API', cat:'API publiques',           geo:'national',          pay:false, pkg:null,     on:false},
   {id:'NL_CFODIVE_DAILY',        name:'CFO Dive — Daily Dive',                                    type:'NL',       cat:'Newsletters',             geo:'international',     pay:false, pkg:null,     on:false},
@@ -195,27 +209,44 @@ function srcForPkg(pkg) {
 }
 
 // Mapping niveau de service → paramètres analytiques (indépendant du package sources)
+// Seuils scoring S-108 (tiede_*, pass2_grayzone_*, pass2_enabled) alignés sur la migration
+// docs/specs/S108_axe2_drafts/01_migration_sql_seuils.sql.
+// NOTE : S-132 (scoring_prudence_policy) n'est pas encore déployée — à réintroduire ici
+// une fois la colonne ajoutée en base (prévu après 2026-06-15).
 function defaultsForServiceLevel(level) {
   if (!level || level === 'BRONZE') return {
     llmProfile: 'light', analysisDepth: 1,
     featureFlags: {
       advanced_scoring: false, advanced_enrichment: false, double_pass_enrichment: false,
       slack_enabled: false, crm_push_enabled: false, advanced_reporting: false, linkedin_module: false
-    }
+    },
+    pass2Enabled: false,
+    tiedeMin: 30, tiedeMax: 60,
+    pass2GrayzoneMin: null, pass2GrayzoneMax: null,
   };
   if (level === 'SILVER') return {
     llmProfile: 'standard', analysisDepth: 2,
     featureFlags: {
       advanced_scoring: true, advanced_enrichment: true, double_pass_enrichment: false,
       slack_enabled: true, crm_push_enabled: false, advanced_reporting: false, linkedin_module: false
-    }
+    },
+    pass2Enabled: true,
+    tiedeMin: 40, tiedeMax: 60,
+    pass2GrayzoneMin: 50, pass2GrayzoneMax: 65,
   };
+  // Décision 2026-06-15 : GOLD aligné à tiedeMin=40 (cohérent S-111 prompt commun
+  // `Confidence tiede 40-60` + CLIENT_ALPHA déjà à 40 + CLIENT_GA UPDATE prod 2026-06-15).
+  // PLATINUM reste à tiedeMin=45 par défaut (aucun client Platinum actif à ce jour,
+  // arbitrage à reprendre si nouveau client Platinum). Mémoire `project_s111_s108_calibration_gap.md`.
   if (level === 'PLATINUM') return {
     llmProfile: 'advanced', analysisDepth: 3,
     featureFlags: {
       advanced_scoring: true, advanced_enrichment: true, double_pass_enrichment: true,
       slack_enabled: true, crm_push_enabled: true, advanced_reporting: true, linkedin_module: true
-    }
+    },
+    pass2Enabled: true,
+    tiedeMin: 45, tiedeMax: 60,
+    pass2GrayzoneMin: 45, pass2GrayzoneMax: 70,
   };
   // GOLD (défaut)
   return {
@@ -223,7 +254,10 @@ function defaultsForServiceLevel(level) {
     featureFlags: {
       advanced_scoring: true, advanced_enrichment: true, double_pass_enrichment: true,
       slack_enabled: true, crm_push_enabled: true, advanced_reporting: true, linkedin_module: true
-    }
+    },
+    pass2Enabled: true,
+    tiedeMin: 40, tiedeMax: 60,
+    pass2GrayzoneMin: 45, pass2GrayzoneMax: 70,
   };
 }
 
@@ -251,6 +285,7 @@ function jsonbLit(obj) {
 function genSQL(st) {
   const {clientId, clientName, geographyScope, regions, pkg, sources, signals, contacts, channel,
          serviceLevel, featureFlags, llmProfile, analysisDepth, excludeGlobal,
+         pass2Enabled, tiedeMin, tiedeMax, pass2GrayzoneMin, pass2GrayzoneMax,
          goldPrefs, hubspot, delivery} = st;
   const now = new Date().toLocaleString('fr-FR', {dateStyle:'short', timeStyle:'medium'});
   const geoStr = regions.join(', ');
@@ -264,6 +299,21 @@ function genSQL(st) {
   const llmVal = llmProfile    ? `'${llmProfile}'`  : `'light'`;
   const adVal  = analysisDepth != null ? analysisDepth : 1;
   const exclVal = esc(excludeGlobal != null ? excludeGlobal : DEFAULT_EXCLUDE_GLOBAL);
+
+  // S-108 — seuils scoring (Pass 1/Pass 2)
+  // Fallback aux defaults du tier si les valeurs n'ont pas été renseignées (rétro-compatibilité state)
+  const _scoringDefaults = defaultsForServiceLevel(serviceLevel);
+  const _pass2Enabled = (pass2Enabled === true || pass2Enabled === false) ? pass2Enabled : _scoringDefaults.pass2Enabled;
+  const _tiedeMin     = (tiedeMin     != null) ? tiedeMin     : _scoringDefaults.tiedeMin;
+  const _tiedeMax     = (tiedeMax     != null) ? tiedeMax     : _scoringDefaults.tiedeMax;
+  const _gzMin        = (pass2GrayzoneMin != null) ? pass2GrayzoneMin : _scoringDefaults.pass2GrayzoneMin;
+  const _gzMax        = (pass2GrayzoneMax != null) ? pass2GrayzoneMax : _scoringDefaults.pass2GrayzoneMax;
+  const sqlInt        = v => (v === null || v === undefined || v === '') ? 'NULL' : String(parseInt(v, 10));
+  const pass2EnabledVal = _pass2Enabled ? 'TRUE' : 'FALSE';
+  const tiedeMinVal     = sqlInt(_tiedeMin);
+  const tiedeMaxVal     = sqlInt(_tiedeMax);
+  const gzMinVal        = sqlInt(_gzMin);
+  const gzMaxVal        = sqlInt(_gzMax);
 
   // feature_flags JSONB
   const ff = featureFlags || {advanced_scoring:false,advanced_enrichment:false,double_pass_enrichment:false,slack_enabled:false,crm_push_enabled:false,advanced_reporting:false,linkedin_module:false};
@@ -311,35 +361,44 @@ function genSQL(st) {
   s += `--   WHERE table_schema='public' AND table_name='clients' ORDER BY ordinal_position;\n`;
   s += `-- Colonnes attendues : client_id, client_name, geography_scope, geographic_scope, package,\n`;
   s += `--   service_level, feature_flags JSONB, llm_profile, analysis_depth, exclude_global,\n`;
-  s += `--   scoring_config JSONB, delivery_config JSONB, crm_config JSONB, hubspot_enabled BOOL, crm_push_approved BOOL\n\n`;
+  s += `--   scoring_config JSONB, delivery_config JSONB, crm_config JSONB, hubspot_enabled BOOL, crm_push_approved BOOL,\n`;
+  s += `--   pass2_enabled BOOL, tiede_min/max INT, pass2_grayzone_min/max INT  -- S-108\n`;
+  s += `-- NB : scoring_prudence_policy (S-132) à inclure une fois la migration appliquée (>= 2026-06-15)\n\n`;
 
   // 1. UPSERT clients
   s += `-- ─── 1. UPSERT clients : ${clientId} ───\n`;
   s += `INSERT INTO clients (\n`;
   s += `  client_id, client_name, geography_scope, geographic_scope, package,\n`;
   s += `  service_level, feature_flags, llm_profile, analysis_depth, exclude_global,\n`;
-  s += `  scoring_config, delivery_config, crm_config, hubspot_enabled, crm_push_approved\n`;
+  s += `  scoring_config, delivery_config, crm_config, hubspot_enabled, crm_push_approved,\n`;
+  s += `  pass2_enabled, tiede_min, tiede_max, pass2_grayzone_min, pass2_grayzone_max\n`;
   s += `) VALUES (\n`;
   s += `  '${esc(clientId)}', '${esc(clientName)}',\n`;
   s += `  '${esc(geoScopeStr)}', '${esc(geoStr)}', ${pkgVal},\n`;
   s += `  ${slVal}, ${jsonbLit(ff)},\n`;
   s += `  ${llmVal}, ${adVal}, '${exclVal}',\n`;
   s += `  ${sc ? jsonbLit(sc) : `'{}'::jsonb`}, ${jsonbLit(dc)}, ${cc ? jsonbLit(cc) : `'{}'::jsonb`},\n`;
-  s += `  ${cc ? 'TRUE' : 'FALSE'}, FALSE  -- crm_push_approved volontairement FALSE : à activer après test E2E\n`;
+  s += `  ${cc ? 'TRUE' : 'FALSE'}, FALSE,  -- crm_push_approved volontairement FALSE : à activer après test E2E\n`;
+  s += `  ${pass2EnabledVal}, ${tiedeMinVal}, ${tiedeMaxVal}, ${gzMinVal}, ${gzMaxVal}  -- S-108\n`;
   s += `)\nON CONFLICT (client_id) DO UPDATE SET\n`;
-  s += `  client_name      = EXCLUDED.client_name,\n`;
-  s += `  geography_scope  = EXCLUDED.geography_scope,\n`;
-  s += `  geographic_scope = EXCLUDED.geographic_scope,\n`;
-  s += `  package          = EXCLUDED.package,\n`;
-  s += `  service_level    = EXCLUDED.service_level,\n`;
-  s += `  feature_flags    = EXCLUDED.feature_flags,\n`;
-  s += `  llm_profile      = EXCLUDED.llm_profile,\n`;
-  s += `  analysis_depth   = EXCLUDED.analysis_depth,\n`;
-  s += `  exclude_global   = EXCLUDED.exclude_global,\n`;
-  s += `  scoring_config   = EXCLUDED.scoring_config,\n`;
-  s += `  delivery_config  = EXCLUDED.delivery_config,\n`;
-  s += `  crm_config       = EXCLUDED.crm_config,\n`;
-  s += `  hubspot_enabled  = EXCLUDED.hubspot_enabled;\n`;
+  s += `  client_name             = EXCLUDED.client_name,\n`;
+  s += `  geography_scope         = EXCLUDED.geography_scope,\n`;
+  s += `  geographic_scope        = EXCLUDED.geographic_scope,\n`;
+  s += `  package                 = EXCLUDED.package,\n`;
+  s += `  service_level           = EXCLUDED.service_level,\n`;
+  s += `  feature_flags           = EXCLUDED.feature_flags,\n`;
+  s += `  llm_profile             = EXCLUDED.llm_profile,\n`;
+  s += `  analysis_depth          = EXCLUDED.analysis_depth,\n`;
+  s += `  exclude_global          = EXCLUDED.exclude_global,\n`;
+  s += `  scoring_config          = EXCLUDED.scoring_config,\n`;
+  s += `  delivery_config         = EXCLUDED.delivery_config,\n`;
+  s += `  crm_config              = EXCLUDED.crm_config,\n`;
+  s += `  hubspot_enabled         = EXCLUDED.hubspot_enabled,\n`;
+  s += `  pass2_enabled           = EXCLUDED.pass2_enabled,\n`;
+  s += `  tiede_min               = EXCLUDED.tiede_min,\n`;
+  s += `  tiede_max               = EXCLUDED.tiede_max,\n`;
+  s += `  pass2_grayzone_min      = EXCLUDED.pass2_grayzone_min,\n`;
+  s += `  pass2_grayzone_max      = EXCLUDED.pass2_grayzone_max;\n`;
   s += `-- Note : crm_push_approved non écrasé sur UPDATE (préserve état d'approbation)\n\n`;
 
   // 2. Souscriptions sources
@@ -380,6 +439,8 @@ function genSQL(st) {
   // 5. Vérification finale
   s += `-- ─── 5. Vérification finale (sanity check) ───\n`;
   s += `SELECT c.client_id, c.service_level, c.package, c.hubspot_enabled, c.crm_push_approved,\n`;
+  s += `       c.pass2_enabled, c.tiede_min, c.tiede_max,\n`;
+  s += `       c.pass2_grayzone_min, c.pass2_grayzone_max,\n`;
   s += `       (SELECT COUNT(*) FROM client_contacts WHERE client_id=c.client_id) AS nb_contacts,\n`;
   s += `       (SELECT COUNT(*) FROM client_source_subscriptions WHERE client_id=c.client_id) AS nb_sources,\n`;
   s += `       (SELECT COUNT(*) FROM client_signal_subscriptions WHERE client_id=c.client_id) AS nb_signals\n`;
@@ -549,6 +610,85 @@ function Step1({st, set}) {
           </p>
         )}
       </div>
+
+      {/* ── Configuration scoring (S-108 — seuils Pass 1/Pass 2) — conditionnel niveau de service ── */}
+      {/* S-132 (scoring_prudence_policy) absent : non déployé en base, à réintroduire >= 2026-06-15 */}
+      {st.serviceLevel && (
+        <div style={{borderTop:'1px solid #1e293b', paddingTop:'20px', marginTop:'4px'}}>
+          <h3 style={{marginBottom:'4px'}}>Configuration scoring
+            <span className="ml-2 text-xs font-normal text-slate-500">(seuils Pass 1/Pass 2 — S-108)</span>
+          </h3>
+          <p className="text-slate-400 text-sm mb-3">
+            Valeurs pré-remplies selon le niveau de service. Ajustez uniquement si vous avez calibré ce client manuellement.
+            Stockées dans les colonnes <code className="text-slate-400">clients.pass2_enabled</code>, <code className="text-slate-400">tiede_min/max</code>,
+            <code className="text-slate-400"> pass2_grayzone_min/max</code>.
+          </p>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="fg">
+              <label className="lbl">Pass 2 activé</label>
+              <div className="flex items-center gap-3 mt-1">
+                <span
+                  onClick={() => set(s => ({...s, pass2Enabled: !s.pass2Enabled}))}
+                  className={`chip ${st.pass2Enabled ? 'chip-on' : 'chip-off'}`}>
+                  {st.pass2Enabled ? '✓ Activé' : '✗ Désactivé'}
+                </span>
+                <span className="text-xs text-slate-500">
+                  {st.serviceLevel === 'BRONZE' ? 'défaut BRONZE : désactivé' : 'défaut tier ≥ SILVER : activé'}
+                </span>
+              </div>
+            </div>
+            <div className="fg">
+              <label className="lbl">Tier appliqué</label>
+              <div className="text-sm text-slate-300 mt-2 font-mono">{st.serviceLevel}</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 gap-4 mt-2">
+            <div className="fg">
+              <label className="lbl">tiede_min</label>
+              <input type="text" inputMode="numeric" pattern="[0-9]*"
+                value={st.tiedeMin == null ? '' : st.tiedeMin}
+                onChange={e => set(s => ({...s, tiedeMin: e.target.value === '' ? null : parseInt(e.target.value, 10)}))}
+                placeholder="ex: 40" />
+            </div>
+            <div className="fg">
+              <label className="lbl">tiede_max</label>
+              <input type="text" inputMode="numeric" pattern="[0-9]*"
+                value={st.tiedeMax == null ? '' : st.tiedeMax}
+                onChange={e => set(s => ({...s, tiedeMax: e.target.value === '' ? null : parseInt(e.target.value, 10)}))}
+                placeholder="ex: 60" />
+            </div>
+            <div className="fg">
+              <label className="lbl">pass2_grayzone_min</label>
+              <input type="text" inputMode="numeric" pattern="[0-9]*"
+                value={st.pass2GrayzoneMin == null ? '' : st.pass2GrayzoneMin}
+                onChange={e => set(s => ({...s, pass2GrayzoneMin: e.target.value === '' ? null : parseInt(e.target.value, 10)}))}
+                disabled={!st.pass2Enabled}
+                placeholder={st.pass2Enabled ? 'ex: 45' : 'NULL si Pass 2 off'} />
+            </div>
+            <div className="fg">
+              <label className="lbl">pass2_grayzone_max</label>
+              <input type="text" inputMode="numeric" pattern="[0-9]*"
+                value={st.pass2GrayzoneMax == null ? '' : st.pass2GrayzoneMax}
+                onChange={e => set(s => ({...s, pass2GrayzoneMax: e.target.value === '' ? null : parseInt(e.target.value, 10)}))}
+                disabled={!st.pass2Enabled}
+                placeholder={st.pass2Enabled ? 'ex: 70' : 'NULL si Pass 2 off'} />
+            </div>
+          </div>
+
+          <p className="text-xs mt-2">
+            <span
+              className="text-blue-400 cursor-pointer hover:underline"
+              onClick={() => set(s => ({...s, ...defaultsForServiceLevel(s.serviceLevel)}))}>
+              ⟲ Réinitialiser aux defaults du tier {st.serviceLevel}
+            </span>
+            <span className="text-slate-500 ml-3">
+              (référence S-108 + alignement S-111/2026-06-15 : BRONZE pas de Pass 2 · SILVER tiede 40-60 grayzone 50-65 · GOLD tiede 40-60 grayzone 45-70 · PLATINUM tiede 45-60 grayzone 45-70)
+            </span>
+          </p>
+        </div>
+      )}
 
       {/* ── C1.1 Préférences Gold/Platinum (conditionnel) ── */}
       {(st.serviceLevel === 'GOLD' || st.serviceLevel === 'PLATINUM') && (
@@ -1295,6 +1435,11 @@ const INIT = {
   clientName:'', clientId:'', idManual:false, secteur:'',
   geographyScope:['national'], regions:[],
   serviceLevel: null, llmProfile: null, analysisDepth: null, featureFlags: null,
+  // S-108 : seuils scoring (pré-remplis selon service_level)
+  // S-132 (scoring_prudence_policy) à réintroduire post-déploiement (>= 2026-06-15)
+  pass2Enabled: null,
+  tiedeMin: null, tiedeMax: null,
+  pass2GrayzoneMin: null, pass2GrayzoneMax: null,
   pkg:null, sources:[],
   signals: SIGNALS.map(s=>s.sid),
   channel:'email',
