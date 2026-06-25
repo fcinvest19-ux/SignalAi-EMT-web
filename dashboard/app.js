@@ -1,6 +1,9 @@
 /* SignalAi Dashboard V1 — app.js */
 
-const API_BASE = 'https://n8n-staging.signalai.fr/webhook';
+// API_BASE env-aware (S185) : dev local (localhost) → staging ; déployé (signalai.fr) → prod.
+const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? 'https://n8n-staging.signalai.fr/webhook'      // dev local → n8n staging
+  : 'https://n8n.srv1265068.hstgr.cloud/webhook';  // signalai.fr → n8n prod
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 const _urlToken = new URLSearchParams(location.search).get('t') || '';
@@ -30,7 +33,15 @@ function buildUrl(endpoint, extras = {}) {
   const p = new URLSearchParams({ token: state.token, range: state.range });
   Object.entries(extras).forEach(([k, v]) => { if (v !== undefined && v !== '') p.set(k, v); });
   ['heats', 'verdicts', 'triggers', 'channels', 'regions'].forEach(k => {
-    if (state.filters[k].length) p.set(k, state.filters[k].join(','));
+    if (!state.filters[k].length) return;
+    // Normalisation : si toutes les checkboxes du groupe sont cochées,
+    // c'est sémantiquement "no filter" → ne pas envoyer le param.
+    // Évite d'exclure les items dont la valeur cible est NULL (ex. items sans région
+    // détectée exclus quand toutes régions cochées via `COALESCE(...) IN (...)`).
+    const total   = document.querySelectorAll(`input[type=checkbox][name="${k}"]`).length;
+    const checked = document.querySelectorAll(`input[type=checkbox][name="${k}"]:checked`).length;
+    if (total > 0 && checked === total) return;
+    p.set(k, state.filters[k].join(','));
   });
   // Sources : sémantique explicite "aucune cochée = aucun résultat",
   // mais avant le premier populate (sources inconnues), on n'envoie rien (= tout).
@@ -124,6 +135,9 @@ async function loadAgg() {
     }
     renderKpis(data);
     renderFunnel(data.funnel, data);
+    updateHeatCounts(data.chaleur || {});
+    updateTriggerCounts(data.donut_enrichissement || {});
+    updateVerdictCounts(data.verdicts || {});
     // Source Performance : visible si rôle admin OU flag dashboard_advanced_enabled
     // (activable par client via clients.dashboard_advanced_enabled, indépendant du service_level)
     const perfSection = document.getElementById('source-perf-section');
@@ -133,10 +147,17 @@ async function loadAgg() {
     renderDonutEnrich(data.donut_enrichissement);
     renderDonutLivraison(data.donut_livraison);
     renderRatios(data.ratios);
+    renderEntrepriseBreakdown(data.entreprise_breakdown);
     if (data.meta.sources_subscribed && data.meta.sources_subscribed.length) {
       populateSourcesFilter(data.meta.sources_subscribed, data.meta.sources_active_ids || []);
     }
-    if (data.meta.regions_available && data.meta.regions_available.length) {
+    // Masquer le pavé Régions tant qu'aucun item n'a de région détectée sur la période
+    // (sinon cocher 1 région exclut 100% des items via COALESCE(...) IN (...)).
+    // À ré-activer dès que enrichissement remplit er.mission_location_region.
+    const regionsBlock = document.querySelector('details.filter-group:has(#regions-filter-options)');
+    const hasRegionData = Array.isArray(data.meta.regions_active) && data.meta.regions_active.length > 0;
+    if (regionsBlock) regionsBlock.style.display = hasRegionData ? '' : 'none';
+    if (hasRegionData && data.meta.regions_available && data.meta.regions_available.length) {
       populateRegionsFilter(data.meta.regions_available);
     }
     document.getElementById('agg-loading').style.display = 'none';
@@ -273,6 +294,16 @@ function renderFunnel(f, data) {
       ])
     },
     {
+      label: 'Nouveaux (dédup URL faite)',
+      sublabel: 'Items uniques entrés en base — Autres (foncé) + RSS (clair)',
+      val: (f.nouveaux_rss || 0) + (f.nouveaux_others || 0),
+      filter: null,
+      bar: makeSegBar((f.nouveaux_rss || 0) + (f.nouveaux_others || 0), [
+        { val: f.nouveaux_others || 0, color: COL.others_dark, label: 'Autres' },
+        { val: f.nouveaux_rss || 0,    color: COL.rss_light,   label: 'RSS (uniques)' },
+      ])
+    },
+    {
       label: 'Scorés',
       sublabel: 'Pass 1 + Pass 2 — du plus chaud au plus froid',
       val: f.scores,
@@ -368,7 +399,7 @@ function renderSourcePerf(rows) {
   const tbody = document.getElementById('source-perf-tbody');
   if (!tbody) return;
   if (!rows || !rows.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-light);padding:24px">Aucune donnée sur la période</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-light);padding:24px">Aucune donnée sur la période</td></tr>';
     return;
   }
   const colorPct = (p, type) => {
@@ -389,10 +420,11 @@ function renderSourcePerf(rows) {
   tbody.innerHTML = rows.map(r => {
     const collected  = Number(r.collected || 0);
     const inserted   = Number(r.inserted || 0);
+    const scored     = Number(r.scored || 0);
     const pertinents = Number(r.pertinents || 0);
     // Ligne rouge si bavarde (collected > 0) mais aucune insertion (= filtrée intégralement par REGEX/dédup)
     const isMuted = collected > 0 && inserted === 0;
-    const pertinencePct = inserted > 0 ? Math.round((pertinents / inserted) * 1000) / 10 : null;
+    const pertinencePct = scored > 0 ? Math.round((pertinents / scored) * 1000) / 10 : null;
     return `
     <tr class="${isMuted ? 'row-muted' : ''}">
       <td title="${escHtml(r.source_id)}">${escHtml(r.source_name)}</td>
@@ -400,6 +432,7 @@ function renderSourcePerf(rows) {
       <td>${r.has_regex ? fmtNum(Number(r.regex_pass || 0)) : '<span class="perf-null">N/A</span>'}</td>
       <td>${r.has_regex ? colorPct(r.regex_efficacy_pct, 'regex') : '<span class="perf-null">N/A</span>'}</td>
       <td>${fmtNum(inserted)}</td>
+      <td>${fmtNum(scored)}</td>
       <td>${fmtNum(pertinents)}</td>
       <td>${colorPct(pertinencePct, 'pertinence')}</td>
       <td>${colorPct(r.dedup_rate_pct, 'dedup')}</td>
@@ -407,6 +440,55 @@ function renderSourcePerf(rows) {
     </tr>
   `;
   }).join('');
+}
+
+// Phase 4 S-150B : ventilation région + secteur (items chauds+brûlants, période sidebar)
+// Source : entreprise_data->'primary' (S-150B Phase 1) avec fallback region_best per-client.
+// Gap connu : pas de mutualisation cross-client (region_best_global) — à ajouter si besoin.
+function renderEntrepriseBreakdown(eb) {
+  const section = document.getElementById('entreprise-breakdown-row');
+  if (!section) return;
+  const regions = (eb && Array.isArray(eb.regions)) ? eb.regions : [];
+  const sectors = (eb && Array.isArray(eb.sectors)) ? eb.sectors : [];
+  if (regions.length === 0 && sectors.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+
+  const TOP_N = 8;
+  const renderList = (rows, target) => {
+    const el = document.getElementById(target);
+    if (!el) return;
+    if (!rows.length) {
+      el.innerHTML = '<div class="breakdown-empty">Aucun item chaud/brûlant résolu sur la période</div>';
+      return;
+    }
+    const total = rows.reduce((acc, r) => acc + Number(r.count || 0), 0);
+    const max = rows[0] ? Number(rows[0].count || 0) : 1;
+    const top = rows.slice(0, TOP_N);
+    const rest = rows.slice(TOP_N);
+    const restTotal = rest.reduce((acc, r) => acc + Number(r.count || 0), 0);
+    let html = top.map(r => {
+      const c = Number(r.count || 0);
+      const pct = total > 0 ? Math.round((c / total) * 1000) / 10 : 0;
+      const w = max > 0 ? Math.max(2, Math.round((c / max) * 100)) : 2;
+      const lbl = r.label || '—';
+      return `<div class="breakdown-row">
+        <div class="breakdown-label" title="${escHtml(lbl)}">${escHtml(lbl)}</div>
+        <div class="breakdown-bar-wrap"><div class="breakdown-bar" style="width:${w}%"></div></div>
+        <div class="breakdown-count">${fmtNum(c)}</div>
+        <div class="breakdown-pct">${pct}%</div>
+      </div>`;
+    }).join('');
+    if (rest.length > 0) {
+      html += `<div class="breakdown-more">+${rest.length} autres (${fmtNum(restTotal)} items)</div>`;
+    }
+    el.innerHTML = html;
+  };
+
+  renderList(regions, 'breakdown-region-list');
+  renderList(sectors, 'breakdown-sector-list');
 }
 
 function renderDonutEnrich(d) {
@@ -717,6 +799,64 @@ function buildTimeline(it) {
       ${s.ts ? `<div class="tl-ts">${fmtDateOnly(s.ts)}</div>` : '<div class="tl-ts"></div>'}
     </li>`
   ).join('');
+}
+
+// ─── FILTER GROUP CARDINALITY ─────────────────────────────────────────────────
+// Met à jour les labels des checkboxes (heats / triggers / verdicts) avec la cardinalité
+// réelle de la période. Important : capturer la baseline UNIQUEMENT quand le groupe
+// n'a pas de filtre actif (sinon les compteurs sont eux-mêmes filtrés et tombent à 0
+// pour les options décochées).
+const _countsBaseline = { heats: null, triggers: null, verdicts: null };
+function _renderCountsForGroup(name) {
+  const baseline = _countsBaseline[name];
+  if (!baseline) return;
+  document.querySelectorAll(`input[type=checkbox][name="${name}"]`).forEach(cb => {
+    const v = cb.value;
+    const n = baseline[v];
+    if (n == null) return;
+    const label = cb.closest('.filter-option');
+    if (!label) return;
+    let cnt = label.querySelector('.heat-count');
+    if (!cnt) {
+      cnt = document.createElement('span');
+      cnt.className = 'heat-count';
+      label.appendChild(cnt);
+    }
+    cnt.textContent = ' (' + fmtNum(n) + ')';
+  });
+}
+function updateHeatCounts(chaleur) {
+  if (!state.filters.heats.length) {
+    _countsBaseline.heats = {
+      brulant: chaleur.brulants || 0,
+      chaud:   chaleur.chauds   || 0,
+      tiede:   chaleur.tiedes   || 0,
+      froid:   chaleur.froids   || 0, // froid+glace fusionnés
+    };
+  }
+  _renderCountsForGroup('heats');
+}
+function updateTriggerCounts(donut) {
+  if (!state.filters.triggers.length) {
+    _countsBaseline.triggers = {
+      AUTO:                 donut.auto         || 0,
+      HUMAN_GATE:           donut.sur_demande  || 0,
+      STUCK_REPLAY_DEBLOCK: donut.recuperation || 0,
+      MANUAL:               donut.manuel       || 0,
+    };
+  }
+  _renderCountsForGroup('triggers');
+}
+function updateVerdictCounts(v) {
+  if (!state.filters.verdicts.length) {
+    _countsBaseline.verdicts = {
+      APPROUVE:  v.approuve  || 0,
+      A_CREUSER: v.a_creuser || 0,
+      ECARTE:    v.ecarte    || 0,
+      attente:   v.attente   || 0,
+    };
+  }
+  _renderCountsForGroup('verdicts');
 }
 
 // ─── FILTERS ─────────────────────────────────────────────────────────────────
