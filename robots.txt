@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://signalai.fr/sitemap.xml
+Sitemap: https://opportia.fr/sitemap.xml

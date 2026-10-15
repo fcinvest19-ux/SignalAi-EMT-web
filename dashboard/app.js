@@ -1,9 +1,9 @@
-/* SignalAi Dashboard V1 — app.js */
+/* OpportIA Dashboard V1 — app.js */
 
-// API_BASE env-aware (S185) : dev local (localhost) → staging ; déployé (signalai.fr) → prod.
+// API_BASE env-aware (S185) : dev local (localhost) → staging ; déployé (opportia.fr) → prod.
 const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
   ? 'https://n8n-staging.signalai.fr/webhook'      // dev local → n8n staging
-  : 'https://n8n.srv1265068.hstgr.cloud/webhook';  // signalai.fr → n8n prod
+  : 'https://n8n.srv1265068.hstgr.cloud/webhook';  // opportia.fr → n8n prod
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 const _urlToken = new URLSearchParams(location.search).get('t') || '';
@@ -204,7 +204,7 @@ function renderKpis(data) {
     { val: fmtNum(f.scores), label: '🌡 Scorés', ratio: '', extra: miniBar(c, totalH), cls: 'accent-navy', tooltip: 'Items avec un score (scored_at IS NOT NULL). Inclut Pass 1, et Pass 2 si zone grise déclenchée. La barre miniature montre la ventilation par chaleur.' },
     { val: fmtNum(f.pertinents), label: '🎯 Pertinents', ratio: fmtPct(r.rendement_scoring), cls: 'accent-navy', tooltip: 'Items scorés avec chaleur ≥ tiède (brûlant + chaud + tiède).\nRendement scoring = pertinents / extraits.' },
     { val: fmtNum(f.enrichis), label: '🔍 Enrichis', ratio: fmtPct(r.rendement_enrichissement), cls: 'accent-orange', tooltip: 'Items enrichis (Brave + Gold LLM) — enriched_at IS NOT NULL.\nRendement enrichissement = enrichis / pertinents.' },
-    { val: fmtNum(f.livres), label: '<img src="logo-signalai.png" class="kpi-icon-img" alt=""> Livrés', ratio: fmtPct(r.rendement_livraison), cls: 'accent-green', tooltip: 'Items effectivement livrés (delivered_at IS NOT NULL).\nRendement livraison = livrés / pertinents.' },
+    { val: fmtNum(f.livres), label: '<img src="logo-opportia.png" class="kpi-icon-img" alt=""> Livrés', ratio: fmtPct(r.rendement_livraison), cls: 'accent-green', tooltip: 'Items effectivement livrés (delivered_at IS NOT NULL).\nRendement livraison = livrés / pertinents.' },
     { val: fmtNum(totalV), label: '⚖ Verdicts', ratio: '', extra: verdictsExtra, cls: 'wide', tooltip: 'Verdicts humains saisis sur les items livrés.\nApprouvé / À creuser / Écarté / Sans verdict (= en attente de revue).' },
   ];
 
@@ -244,7 +244,7 @@ function renderFunnel(f, data) {
     others_dark:  '#1e3a8a',  // Autres bleu foncé
     glace_froid:  '#94a3b8',  // slate-400 — gris-bleu froid lisible sur blanc
     tiede:        '#fbbf24',  // jaune ambre
-    chaud:        '#F05A1E',  // orange charte SignalAi
+    chaud:        '#F05A1E',  // orange charte OpportIA
     brulant:      '#991b1b',  // rouge foncé
     verdict_app:  '#14532d',  // vert foncé
     verdict_cre:  '#86efac',  // vert pâle

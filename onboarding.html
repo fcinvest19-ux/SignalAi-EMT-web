@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Signalai — Onboarding Client EMT</title>
+  <title>OpportIA — Onboarding Client EMT</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -342,7 +342,7 @@ function genSQL(st) {
   s += `-- ${nb} sources · ${ns} signaux · ${nc} contacts · canal=${ch}\n`;
   if (cc) s += `-- HubSpot : activé (push CRM via S-CRM-HUBSPOT-PUSH) — crm_push_approved restera FALSE jusqu'au test E2E\n`;
   if (sc) s += `-- Scoring : ${sc.sectors_excluded.length} secteur(s) exclu(s)\n`;
-  s += `-- Généré le ${now} via Signalai Onboarding v2.0\n`;
+  s += `-- Généré le ${now} via OpportIA Onboarding v2.0\n`;
   s += `-- EXÉCUTION : sudo -u postgres psql -d agent_emt — bloc par bloc (statement-par-statement)\n`;
   s += `-- ═══════════════════════════════════════════════════════════\n\n`;
 
@@ -1485,9 +1485,9 @@ function App() {
     <div style={{background:'#0f172a', minHeight:'100vh'}}>
       <div style={{borderBottom:'1px solid #1e293b'}} className="px-6 py-3">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
-          <img src="logo-signalai.png"
-               alt="SignalAi" className="h-8 w-8 rounded-lg object-cover" />
-          <span className="text-white text-sm"><strong>SignalAi</strong>&nbsp;&nbsp;Onboarding Form</span>
+          <img src="logo-opportia.png"
+               alt="OpportIA" className="h-8 w-8 rounded-lg object-cover" />
+          <span className="text-white text-sm"><strong>OpportIA</strong>&nbsp;&nbsp;Onboarding Form</span>
           <span className="ml-auto text-xs text-slate-600 font-mono">v2.0 · 2026-05-17</span>
         </div>
       </div>
