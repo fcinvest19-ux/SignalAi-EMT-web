@@ -416,13 +416,13 @@ function genSQL(st) {
   if (nc > 0) {
     s += `INSERT INTO client_contacts\n`;
     s += `  (client_id, name, email, role, geographic_scope,\n`;
-    s += `   slack_channel, receives_alert, receives_digest_daily, receives_digest_weekly, active) VALUES\n`;
+    s += `   slack_channel, receives_alert, receives_digest_daily, receives_digest_weekly, receives_pc, receives_non_pc, active) VALUES\n`;
     contacts.forEach((c, i) => {
       const sl = c.slack && c.slack.trim() ? `'${esc(c.slack.trim())}'` : 'NULL';
       const scopes = c.scopes || [];
       s += `  ('${esc(clientId)}', '${esc(c.name)}', '${esc(c.email)}',\n`;
       s += `   '${c.role}', ${pgArr(scopes)},\n`;
-      s += `   ${sl}, ${c.alert?'TRUE':'FALSE'}, ${c.digest_daily?'TRUE':'FALSE'}, ${c.digest_weekly?'TRUE':'FALSE'}, TRUE)${i<nc-1?',':';'}\n`;
+      s += `   ${sl}, ${c.alert?'TRUE':'FALSE'}, ${c.digest_daily?'TRUE':'FALSE'}, ${c.digest_weekly?'TRUE':'FALSE'}, ${c.pc!==false?'TRUE':'FALSE'}, ${c.non_pc!==false?'TRUE':'FALSE'}, TRUE)${i<nc-1?',':';'}\n`;
     });
   }
   s += `\n`;
@@ -1001,7 +1001,8 @@ function Step4({st, set}) {
       id: Date.now(), name:'', email:'', role:'regional',
       scopes: s.regions.length ? [s.regions[0]] : ['ALL'],
       slack:'',
-      alert:true, digest_daily:false, digest_weekly:false
+      alert:true, digest_daily:false, digest_weekly:false,
+      non_pc:true, pc:true
     }]
   }));
   const del = id => set(s => ({...s, contacts: s.contacts.filter(c=>c.id!==id)}));
@@ -1173,7 +1174,16 @@ function Step4({st, set}) {
                   <input type="checkbox" checked={!!c.digest_weekly} onChange={e=>upd(c.id,'digest_weekly',e.target.checked)} className="w-4 h-4 accent-amber-500" />
                   <span className="text-sm text-slate-300">📅 Digest hebdo (tièdes)</span>
                 </label>
+                <label className="flex items-center gap-2 cursor-pointer lbl mb-0">
+                  <input type="checkbox" checked={c.non_pc!==false} onChange={e=>upd(c.id,'non_pc',e.target.checked)} className="w-4 h-4 accent-slate-400" />
+                  <span className="text-sm text-slate-300">📂 Flux hors-PC</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer lbl mb-0">
+                  <input type="checkbox" checked={c.pc!==false} onChange={e=>upd(c.id,'pc',e.target.checked)} className="w-4 h-4 accent-purple-500" />
+                  <span className="text-sm text-slate-300">⚖️ Flux PC (procédures collectives)</span>
+                </label>
               </div>
+              <p className="text-xs text-slate-500 mt-2">Décochez « Flux hors-PC » pour un associé qui ne doit recevoir que les procédures collectives (ex. expert PC dédié).</p>
             </div>
           );
         })}
@@ -1434,7 +1444,7 @@ const INIT = {
   pkg:null, sources:[],
   signals: SIGNALS.map(s=>s.sid),
   channel:'email',
-  contacts:[{id:1, name:'', email:'', role:'national', scopes:['ALL'], slack:'', alert:true, digest_daily:true, digest_weekly:true}],
+  contacts:[{id:1, name:'', email:'', role:'national', scopes:['ALL'], slack:'', alert:true, digest_daily:true, digest_weekly:true, non_pc:true, pc:true}],
   excludeGlobal: DEFAULT_EXCLUDE_GLOBAL,
   // C1.1 — Préférences Gold/Platinum (affichées conditionnellement)
   goldPrefs: {
